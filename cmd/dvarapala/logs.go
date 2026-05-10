@@ -331,9 +331,9 @@ func (f *logFormatter) formatLine(w io.Writer, line []byte) {
 // request's method for inbound, the correlated request's method for
 // outbound responses) used by shouldHide.
 type summary struct {
-	display          string
-	tool             string
-	effectiveMethod  string
+	display         string
+	tool            string
+	effectiveMethod string
 }
 
 // summarise turns the JSON-RPC payload into a human-friendly one-liner:
