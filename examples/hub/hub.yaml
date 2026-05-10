@@ -1,0 +1,34 @@
+# Example Dvarapala hub config.
+#
+# Run with:
+#   dvarapala hub --config ~/.dvarapala/hub.yaml --policy ~/.dvarapala/policy.yaml
+#
+# Then in your MCP client config (Claude Code / Desktop / Cursor / Cline)
+# point each server at:
+#   http://127.0.0.1:9000/<name>
+#
+# (mcpServers entries with `"url": "..."` instead of `"command": ...`)
+
+listen: 127.0.0.1:9000
+audit: ~/.dvarapala/audit.jsonl
+policy: ~/.dvarapala/policy.yaml
+
+servers:
+  filesystem:
+    command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", "~"]
+
+  github:
+    command: ["npx", "-y", "@modelcontextprotocol/server-github"]
+    env:
+      - GITHUB_TOKEN=ghp_replace_me
+
+  postgres:
+    command:
+      - "npx"
+      - "-y"
+      - "@modelcontextprotocol/server-postgres"
+      - "postgresql://localhost/mydb"
+
+  # HTTP-backed upstream (e.g. a hosted MCP).
+  atlassian:
+    upstream: "https://mcp.atlassian.com/v1/mcp"
