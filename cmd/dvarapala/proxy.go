@@ -21,12 +21,16 @@ func cmdProxy(ctx context.Context, args []string) error {
 		policyPath string
 		auditPath  string
 		serverName string
+		auditMaxMB int
+		auditKeep  int
 	)
 	fs.StringVar(&upstream, "upstream", "", "upstream MCP HTTP URL (required)")
 	fs.StringVar(&listen, "listen", "127.0.0.1:8080", "local address to listen on")
 	fs.StringVar(&policyPath, "policy", "", "policy YAML (empty = transparent passthrough)")
 	fs.StringVar(&auditPath, "audit", defaultAuditPath(), "audit log path")
 	fs.StringVar(&serverName, "server", "", "logical name for this MCP, tagged into every audit event")
+	fs.IntVar(&auditMaxMB, "audit-max-mb", 50, "rotate audit log after this many MiB (0 disables rotation)")
+	fs.IntVar(&auditKeep, "audit-keep", 5, "number of rotated audit files to retain")
 	fs.Usage = func() {
 		fmt.Fprint(fs.Output(), `Usage: dvarapala proxy --upstream URL [flags]
 
@@ -70,7 +74,10 @@ Examples:
 	}
 	eng.SetRegistry(registry)
 
-	log, err := audit.Open(expandHome(auditPath))
+	log, err := audit.OpenWith(expandHome(auditPath), audit.RotateOptions{
+		MaxBytes:  int64(auditMaxMB) * 1024 * 1024,
+		KeepFiles: auditKeep,
+	})
 	if err != nil {
 		return fmt.Errorf("audit: %w", err)
 	}

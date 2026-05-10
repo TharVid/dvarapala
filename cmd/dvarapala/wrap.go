@@ -26,10 +26,14 @@ func cmdWrap(ctx context.Context, args []string) error {
 		policyPath string
 		auditPath  string
 		serverName string
+		auditMaxMB int
+		auditKeep  int
 	)
 	fs.StringVar(&policyPath, "policy", "", "path to policy YAML (empty = transparent passthrough)")
 	fs.StringVar(&auditPath, "audit", defaultAuditPath(), "path to audit log (JSONL)")
 	fs.StringVar(&serverName, "server", "", "logical name for this MCP, tagged into every audit event")
+	fs.IntVar(&auditMaxMB, "audit-max-mb", 50, "rotate audit log after this many MiB (0 disables rotation)")
+	fs.IntVar(&auditKeep, "audit-keep", 5, "number of rotated audit files to retain")
 	fs.Usage = func() {
 		fmt.Fprint(fs.Output(), `Usage: dvarapala wrap [flags] -- <command> [args...]
 
@@ -73,7 +77,10 @@ Example:
 	}
 	eng.SetRegistry(registry)
 
-	log, err := audit.Open(expandHome(auditPath))
+	log, err := audit.OpenWith(expandHome(auditPath), audit.RotateOptions{
+		MaxBytes:  int64(auditMaxMB) * 1024 * 1024,
+		KeepFiles: auditKeep,
+	})
 	if err != nil {
 		return fmt.Errorf("audit: %w", err)
 	}

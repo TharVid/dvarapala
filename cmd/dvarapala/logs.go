@@ -198,12 +198,55 @@ Examples:
 				return nil
 			case <-tick.C:
 			}
+			// Detect rotation: the file at `p` may now be a different
+			// inode (audit.jsonl renamed to audit.jsonl.1, fresh
+			// audit.jsonl created). Reopen so we don't miss new events.
+			if newF, ok := reopenIfRotated(p, f); ok {
+				_ = f.Close()
+				f = newF
+				rd = bufio.NewReader(f)
+			}
 			continue
 		}
 		if err != nil {
 			return err
 		}
 	}
+}
+
+// reopenIfRotated checks whether the file at path is now a different
+// inode than the open handle f, or has been truncated below the current
+// read offset. If so, opens path fresh and returns it. The caller is
+// responsible for closing the prior handle.
+func reopenIfRotated(path string, f *os.File) (*os.File, bool) {
+	pathInfo, err := os.Stat(path)
+	if err != nil {
+		return nil, false
+	}
+	openInfo, err := f.Stat()
+	if err != nil {
+		return nil, false
+	}
+	if !os.SameFile(pathInfo, openInfo) {
+		newF, err := os.Open(path)
+		if err != nil {
+			return nil, false
+		}
+		return newF, true
+	}
+	// Same inode but truncated (size shrunk below our read position).
+	pos, err := f.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return nil, false
+	}
+	if pathInfo.Size() < pos {
+		newF, err := os.Open(path)
+		if err != nil {
+			return nil, false
+		}
+		return newF, true
+	}
+	return nil, false
 }
 
 // waitForFile blocks until path exists or ctx is done.

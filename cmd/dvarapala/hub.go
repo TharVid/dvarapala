@@ -20,11 +20,15 @@ func cmdHub(ctx context.Context, args []string) error {
 		policyPath    string
 		auditPath     string
 		listen        string
+		auditMaxMB    int
+		auditKeep     int
 	)
 	fs.StringVar(&hubConfigPath, "config", "", "path to hub.yaml (required)")
 	fs.StringVar(&policyPath, "policy", "", "policy YAML (overrides hub.yaml.policy)")
 	fs.StringVar(&auditPath, "audit", defaultAuditPath(), "audit log path")
 	fs.StringVar(&listen, "listen", "", "listen address (overrides hub.yaml.listen)")
+	fs.IntVar(&auditMaxMB, "audit-max-mb", 50, "rotate audit log after this many MiB (0 disables rotation)")
+	fs.IntVar(&auditKeep, "audit-keep", 5, "number of rotated audit files to retain")
 	fs.Usage = func() {
 		fmt.Fprint(fs.Output(), `Usage: dvarapala hub --config hub.yaml [flags]
 
@@ -86,7 +90,10 @@ Then in your MCP client config, point each server at:
 	}
 	eng.SetRegistry(registry)
 
-	log, err := audit.Open(expandHome(auditPath))
+	log, err := audit.OpenWith(expandHome(auditPath), audit.RotateOptions{
+		MaxBytes:  int64(auditMaxMB) * 1024 * 1024,
+		KeepFiles: auditKeep,
+	})
 	if err != nil {
 		return fmt.Errorf("audit: %w", err)
 	}

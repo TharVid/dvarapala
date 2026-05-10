@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.8] — 2026-05-10
+
+### Added
+
+- **Audit log rotation.** `~/.dvarapala/audit.jsonl` no longer grows
+  unbounded. Defaults: rotate when the active file passes 50 MiB, keep
+  5 rotated copies (`.1`–`.5`) — total disk cap ~300 MiB. On rotation
+  the active file is renamed to `<path>.1`, older copies shift down,
+  and the file at the keep horizon is dropped.
+
+- **`--audit-max-mb` / `--audit-keep` flags** on `wrap`, `proxy`, and
+  `hub` commands. Pass `--audit-max-mb 0` to disable rotation entirely
+  (legacy behaviour) or tune both for high-traffic deployments.
+
+### Fixed
+
+- **`dvarapala logs -f` survives a rotation.** Before, when the writer
+  rotated the active file mid-tail, the follower kept reading the
+  renamed (now-stale) file forever and missed every subsequent event.
+  The follow loop now stats the path on each idle tick, detects an
+  inode change (or below-offset truncation), and reopens transparently.
+
 ## [0.1.7] — 2026-05-10
 
 ### Added
