@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] — 2026-05-10
+
+### Added
+
+- **Homebrew tap** at https://github.com/TharVid/homebrew-dvarapala —
+  `brew tap tharvid/dvarapala && brew install dvarapala`.
+- **Scoop bucket** at https://github.com/TharVid/scoop-dvarapala —
+  `scoop bucket add dvarapala https://github.com/TharVid/scoop-dvarapala
+  && scoop install dvarapala`.
+
+### Notes
+
+- `apt install dvarapala` deferred to 0.1.2 — needs a hosted APT repo
+  (GitHub Pages + reprepro + GPG, or Cloudsmith OSS). Until then,
+  download the `.deb` from the v0.1.x release page and `sudo dpkg -i`.
+- PyPI + npm SDK publishing intentionally skipped — the SDKs are stubs
+  and there's no real consumer yet; squatting on package names with
+  non-functional code is bad form.
+
 ## [0.1.0] — 2026-05-10
 
 First public release. The full enforcement stack — three transports

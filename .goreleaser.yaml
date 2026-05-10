@@ -111,35 +111,38 @@ docker_manifests:
       - "ghcr.io/tharvid/dvarapala:latest-amd64"
       - "ghcr.io/tharvid/dvarapala:latest-arm64"
 
-# Homebrew + Scoop publishers are commented out for v0.1.0 — the tap
-# repositories (TharVid/homebrew-dvarapala, TharVid/scoop-dvarapala) and
-# their PAT secrets don't exist yet. Re-enable once the taps are created.
-#
-# brews:
-#   - name: dvarapala
-#     repository:
-#       owner: tharvid
-#       name: homebrew-dvarapala
-#       branch: main
-#       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-#     homepage: "https://github.com/tharvid/dvarapala"
-#     description: "MCP security gateway — drop-in protection for MCP servers"
-#     license: "MIT"
-#     test: |
-#       system "#{bin}/dvarapala", "version"
-#     install: |
-#       bin.install "dvarapala"
-#
-# scoops:
-#   - name: dvarapala
-#     repository:
-#       owner: tharvid
-#       name: scoop-dvarapala
-#       branch: main
-#       token: "{{ .Env.SCOOP_TAP_TOKEN }}"
-#     homepage: "https://github.com/tharvid/dvarapala"
-#     description: "MCP security gateway"
-#     license: MIT
+brews:
+  - name: dvarapala
+    repository:
+      owner: TharVid
+      name: homebrew-dvarapala
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: "https://github.com/TharVid/dvarapala"
+    description: "MCP security gateway — drop-in protection for MCP servers"
+    license: "MIT"
+    commit_author:
+      name: dvarapala-bot
+      email: noreply@tharvid.in
+    test: |
+      system "#{bin}/dvarapala", "version"
+    install: |
+      bin.install "dvarapala"
+      pkgshare.install Dir["policies/*"] if Dir.exist?("policies")
+
+scoops:
+  - name: dvarapala
+    repository:
+      owner: TharVid
+      name: scoop-dvarapala
+      branch: main
+      token: "{{ .Env.SCOOP_TAP_TOKEN }}"
+    homepage: "https://github.com/TharVid/dvarapala"
+    description: "MCP security gateway — drop-in protection for MCP servers"
+    license: MIT
+    commit_author:
+      name: dvarapala-bot
+      email: noreply@tharvid.in
 
 nfpms:
   - id: dvarapala
