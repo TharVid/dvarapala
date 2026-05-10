@@ -11,6 +11,8 @@ import (
 	"github.com/tharvid/dvarapala/internal/audit"
 	"github.com/tharvid/dvarapala/internal/config"
 	"github.com/tharvid/dvarapala/internal/detectors"
+	"github.com/tharvid/dvarapala/internal/detectors/pii"
+	"github.com/tharvid/dvarapala/internal/detectors/promptinjection"
 	"github.com/tharvid/dvarapala/internal/detectors/secrets"
 	"github.com/tharvid/dvarapala/internal/policy"
 	"github.com/tharvid/dvarapala/internal/proxy"
@@ -88,10 +90,15 @@ Example:
 	return nil
 }
 
-// buildDetectorRegistry assembles the in-process detectors. Sidecar-backed
-// detectors (Presidio for PII, llm-guard for prompt injection) plug in via
-// HTTP clients in a follow-up commit; their absence here is silent (rules
-// referencing them no-op until wired).
+// buildDetectorRegistry assembles the available detectors:
+//
+//   - gitleaks: always on (embedded library, no network).
+//   - Presidio (PII/PHI/PCI): registered if DVARAPALA_PRESIDIO_URL is set.
+//   - llm-guard (prompt injection): registered if DVARAPALA_LLMGUARD_URL is set.
+//
+// Sidecar detectors degrade gracefully — if the sidecar can't be reached
+// at runtime, Detect() returns an error and the engine treats it as "no
+// match", so the gateway never blocks traffic on detector unavailability.
 func buildDetectorRegistry() (*detectors.Registry, error) {
 	r := detectors.NewRegistry()
 	gl, err := secrets.New()
@@ -99,6 +106,12 @@ func buildDetectorRegistry() (*detectors.Registry, error) {
 		return nil, fmt.Errorf("gitleaks: %w", err)
 	}
 	r.Register(gl)
+	if u := os.Getenv("DVARAPALA_PRESIDIO_URL"); u != "" {
+		r.Register(pii.New(u))
+	}
+	if u := os.Getenv("DVARAPALA_LLMGUARD_URL"); u != "" {
+		r.Register(promptinjection.New(u))
+	}
 	return r, nil
 }
 
