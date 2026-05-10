@@ -1,6 +1,7 @@
-# Used by GoReleaser — binary already built on host, just copy in.
+# Used by GoReleaser — the binary is built on the host then copied in.
+# policies/*.yaml are already embedded into the binary via go:embed
+# (see policies/embed.go), so the image doesn't need a filesystem copy.
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY dvarapala /usr/bin/dvarapala
-COPY policies /etc/dvarapala/policies
 USER nonroot:nonroot
 ENTRYPOINT ["/usr/bin/dvarapala"]
