@@ -6,13 +6,36 @@
 [![CI](https://github.com/tharvid/dvarapala/actions/workflows/ci.yml/badge.svg)](https://github.com/tharvid/dvarapala/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Dvarapala sits between your LLM client (Claude Desktop, Cursor, Cline, custom agents) and any MCP server. It inspects every JSON-RPC message in both directions, enforces a YAML policy, and blocks / redacts / logs anything that violates the rules — with **zero changes to the underlying MCP server**.
+Dvarapala sits between your LLM client (Claude Desktop, Cursor, Cline, custom agents) and any **third-party MCP server**. It inspects every JSON-RPC message in both directions, enforces a YAML policy, and blocks / redacts / logs anything that violates the rules — with **zero changes to the underlying MCP server**.
 
 It does **not** reinvent detection. It composes the best open-source security libraries (Presidio, gitleaks, llm-guard, OPA, garak) into a single MCP-aware enforcement layer.
 
+## Scope
+
+**Dvarapala protects third-party MCP servers** — the npm packages, community servers, and custom enterprise MCPs your agents talk to. These are the wild west: untrusted code, mutable tool descriptions, opaque API behaviour.
+
+**Dvarapala does not (and cannot) replace the LLM client's own permission system** — Claude Code's built-in `Read`/`Write`/`Bash` etc. are not MCP traffic and are governed by [Anthropic's permission model](https://docs.claude.com/en/docs/claude-code/iam). Use both: Claude Code permissions for built-ins, Dvarapala for third-party MCPs. Two layers, both needed.
+
+```
+┌─────────────────────────────────────────────────┐
+│ LLM Client (Claude Code, Cursor, …)             │
+│ ┌──────────────────┐  ┌────────────────────────┐ │
+│ │ Built-in tools   │  │ Third-party MCPs       │ │
+│ │ (Anthropic)      │  │ (community / custom)   │ │
+│ │ Read, Write, …   │  │ github, postgres, …    │ │
+│ └────────┬─────────┘  └─────────┬──────────────┘ │
+│          │                      │                 │
+│   Anthropic perms        ┌──────▼──────┐          │
+│                          │  Dvarapala  │ ← us     │
+│                          └──────┬──────┘          │
+└───────────────────────────────┬─┴──────────────────┘
+                                ▼
+                      Real MCP servers
+```
+
 ## Why
 
-MCP is the new attack surface. Every Claude Desktop / Cursor user is one malicious tool away from a credential leak, prompt injection, or destructive action. Existing security tooling is not MCP-aware.
+The third-party MCP attack surface is brand new and growing fast. Every Claude Code / Cursor / Cline user installing community MCPs is one malicious tool away from a credential leak, prompt injection, or destructive action. Existing security tooling is not MCP-aware.
 
 Dvarapala addresses MCP-specific threats that no other tool covers today:
 
