@@ -60,6 +60,8 @@ func run(ctx context.Context, args []string) error {
 		return cmdScan(ctx, rest)
 	case "doctor":
 		return cmdDoctor(ctx, rest)
+	case "logs":
+		return cmdLogs(ctx, rest)
 	case "version", "-v", "--version":
 		fmt.Println(version.String())
 		return nil
@@ -87,6 +89,7 @@ COMMANDS
   install    Auto-install into a known MCP client (Claude Desktop, Cursor, Cline)
   scan       One-shot security scan of an MCP server
   doctor     Diagnose installation and configuration
+  logs       Pretty-print or follow the audit log
   version    Print version info
 
 EXAMPLES
