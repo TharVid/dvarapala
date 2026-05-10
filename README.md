@@ -1,155 +1,192 @@
-# Dvarapala 🛡️
+# Dvarapala
 
-> *द्वारपाल — the gatekeeper.*
-> A drop-in security gateway for the Model Context Protocol (MCP).
+> *द्वारपाल — gatekeeper.* Drop-in security gateway for the Model Context Protocol (MCP).
 
-[![CI](https://github.com/tharvid/dvarapala/actions/workflows/ci.yml/badge.svg)](https://github.com/tharvid/dvarapala/actions/workflows/ci.yml)
+[![CI](https://github.com/TharVid/dvarapala/actions/workflows/ci.yml/badge.svg)](https://github.com/TharVid/dvarapala/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/TharVid/dvarapala?sort=semver)](https://github.com/TharVid/dvarapala/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Docker](https://img.shields.io/badge/ghcr.io-tharvid%2Fdvarapala-blue?logo=docker)](https://github.com/TharVid/dvarapala/pkgs/container/dvarapala)
 
-Dvarapala sits between your LLM client (Claude Desktop, Cursor, Cline, custom agents) and any **third-party MCP server**. It inspects every JSON-RPC message in both directions, enforces a YAML policy, and blocks / redacts / logs anything that violates the rules — with **zero changes to the underlying MCP server**.
+Dvarapala sits between an LLM client (Claude Code, Claude Desktop, Cursor, Cline, custom agents) and any **third-party MCP server**. It parses every JSON-RPC message in both directions, enforces a YAML policy, and **denies / redacts / logs** anything that violates the rules — with **zero changes to the underlying MCP server**.
 
-It does **not** reinvent detection. It composes the best open-source security libraries (Presidio, gitleaks, llm-guard, OPA, garak) into a single MCP-aware enforcement layer.
+It does **not** reinvent detection. It composes battle-tested OSS — gitleaks, Microsoft Presidio, ProtectAI llm-guard, garak — into an MCP-aware enforcement layer.
+
+## What it stops
+
+- **Tool poisoning** — malicious instructions hidden in tool descriptions
+- **Tool mutation / rug-pull** — tool definitions silently changing between sessions (cross-restart fingerprints)
+- **Indirect prompt injection** through tool outputs
+- **Secrets leakage** — AWS keys, GitHub tokens, private keys, JWT, etc. (gitleaks, 150+ rules)
+- **PII / PHI / PCI exfiltration** through tool outputs (Presidio sidecar)
+- **Destructive actions** — `rm -rf`, `DROP TABLE`, `dd if=…of=/dev/sda` etc.
+- **Excessive agency** — tools chained into exfiltration paths
+
+## Install
+
+### macOS / Linux
+
+```bash
+brew tap tharvid/dvarapala
+brew install dvarapala
+```
+
+### Windows
+
+```bash
+scoop bucket add dvarapala https://github.com/TharVid/scoop-dvarapala
+scoop install dvarapala
+```
+
+### Docker
+
+```bash
+docker pull ghcr.io/tharvid/dvarapala:latest
+```
+
+### Go
+
+```bash
+go install github.com/tharvid/dvarapala/cmd/dvarapala@latest
+```
+
+### Linux packages (.deb / .rpm / .apk)
+
+Grab the right file from the [latest release](https://github.com/TharVid/dvarapala/releases/latest) and install with `dpkg -i` / `rpm -i` / `apk add --allow-untrusted`. Real `apt install dvarapala` lands in v0.1.2.
+
+## 5-minute first run
+
+```bash
+# 1. Scaffold a default policy
+dvarapala init
+
+# 2. Health-check
+dvarapala doctor
+
+# 3. Wire it into Claude Code (one-shot)
+dvarapala install \
+  --client claude-code \
+  --server filesystem \
+  --command "npx -y @modelcontextprotocol/server-filesystem ~"
+
+# 4. Start Claude Code, ask it to read a file, then in another terminal
+dvarapala logs -f
+```
+
+You'll see every JSON-RPC message Claude Code sends to the filesystem MCP server flow through the gateway, with `action=allow` / `deny` / `redact` per the policy. Try asking Claude to read a file containing fake AWS keys — the gateway redacts them before the LLM ever sees them.
+
+For deeper walkthroughs see **[docs/getting-started.md](docs/getting-started.md)** and the per-client guides in **[docs/deployment/](docs/deployment/)**.
+
+## Three deployment shapes
+
+| Mode | Use case | Command |
+|---|---|---|
+| **Wrap** | One stdio MCP per process — drops into Claude Code/Desktop/Cursor/Cline configs | `dvarapala wrap -- npx ... server-filesystem` |
+| **Proxy** | One hosted HTTP MCP (Atlassian, Sentry, internal microservice) | `dvarapala proxy --upstream URL` |
+| **Hub** | One Dvarapala fronting many MCPs (the enterprise shape) | `dvarapala hub --config hub.yaml` |
+
+All three share the same engine, detectors, audit log, and policy YAML. See **[docs/architecture.md](docs/architecture.md)**.
 
 ## Scope
 
-**Dvarapala protects third-party MCP servers** — the npm packages, community servers, and custom enterprise MCPs your agents talk to. These are the wild west: untrusted code, mutable tool descriptions, opaque API behaviour.
+**Dvarapala protects third-party MCP servers** — community npm packages, custom enterprise MCPs, hosted MCP services. These are the wild-west attack surface.
 
-**Dvarapala does not (and cannot) replace the LLM client's own permission system** — Claude Code's built-in `Read`/`Write`/`Bash` etc. are not MCP traffic and are governed by [Anthropic's permission model](https://docs.claude.com/en/docs/claude-code/iam). Use both: Claude Code permissions for built-ins, Dvarapala for third-party MCPs. Two layers, both needed.
+**Dvarapala does not replace the LLM client's own permission system** — Claude Code's built-in `Read`/`Write`/`Bash`/`Edit` are not MCP and are governed by [Anthropic's permission model](https://docs.claude.com/en/docs/claude-code/iam). Use both: client perms for built-in tools, Dvarapala for third-party MCPs. Two layers, both needed.
 
 ```
 ┌─────────────────────────────────────────────────┐
 │ LLM Client (Claude Code, Cursor, …)             │
-│ ┌──────────────────┐  ┌────────────────────────┐ │
-│ │ Built-in tools   │  │ Third-party MCPs       │ │
-│ │ (Anthropic)      │  │ (community / custom)   │ │
-│ │ Read, Write, …   │  │ github, postgres, …    │ │
-│ └────────┬─────────┘  └─────────┬──────────────┘ │
-│          │                      │                 │
-│   Anthropic perms        ┌──────▼──────┐          │
-│                          │  Dvarapala  │ ← us     │
-│                          └──────┬──────┘          │
-└───────────────────────────────┬─┴──────────────────┘
-                                ▼
-                      Real MCP servers
+│ ┌──────────────────┐  ┌────────────────────────┐│
+│ │ Built-in tools   │  │ Third-party MCPs       ││
+│ │ Read, Write, …   │  │ github, postgres, …    ││
+│ └────────┬─────────┘  └─────────┬──────────────┘│
+│          │                      │                │
+│   Anthropic perms        ┌──────▼──────┐         │
+│                          │  Dvarapala  │ ← us    │
+│                          └──────┬──────┘         │
+└────────────────────────────────┬┴─────────────────┘
+                                 ▼
+                       Real MCP servers
 ```
 
-## Why
+## Detectors
 
-The third-party MCP attack surface is brand new and growing fast. Every Claude Code / Cursor / Cline user installing community MCPs is one malicious tool away from a credential leak, prompt injection, or destructive action. Existing security tooling is not MCP-aware.
+Detection of well-defined classes is delegated to the best OSS — Dvarapala glues them together rather than maintaining its own regex set. The MCP-specific detectors are the novel contribution.
 
-Dvarapala addresses MCP-specific threats that no other tool covers today:
+| Detector | Source | Status | Detects |
+|---|---|---|---|
+| **gitleaks** | embedded Go library | always on | secrets (AWS, GitHub, GCP, private keys, JWT, etc.) |
+| **tool-poisoning** | Dvarapala native | always on | prompt-injection patterns in tool descriptions |
+| **tool-mutation** | Dvarapala native (persistent SHA-256 store) | always on | rug-pull — tool defs changing across sessions |
+| **destructive-actions** | Dvarapala native | always on | `rm -rf`, `DROP TABLE`, `dd if=…of=/dev/sd*` |
+| **Presidio** | Microsoft, sidecar | opt-in via `DVARAPALA_PRESIDIO_URL` | PII / PHI / PCI (50+ recognizers, HIPAA, GDPR) |
+| **llm-guard** | ProtectAI, sidecar | opt-in via `DVARAPALA_LLMGUARD_URL` | indirect prompt injection (ML model + heuristics) |
 
-- **Tool poisoning** — malicious instructions hidden in tool descriptions
-- **Line-jumping** — tool descriptions that hijack the system prompt
-- **Tool mutation / rug-pull** — tool definitions changing between sessions
-- **Indirect prompt injection** via tool outputs
-- **Excessive agency** — agents chaining tools into exfiltration paths
-- **PII / PHI / PCI / secrets leakage** through tool calls or results
-- **Destructive actions** — `rm -rf`, `DROP TABLE`, etc. on tool args
+See **[docs/built-in-rules.md](docs/built-in-rules.md)** for rule packs and **[docs/policy-language.md](docs/policy-language.md)** for the policy schema.
 
-## Five-second integration
+## Commands
 
-```bash
-brew install tharvid/dvarapala/dvarapala
-```
+| Command | Purpose |
+|---|---|
+| `dvarapala wrap -- CMD` | Wrap an MCP stdio server with a security policy |
+| `dvarapala proxy --upstream URL` | Run as an HTTP/SSE proxy in front of a hosted MCP |
+| `dvarapala hub --config FILE` | Run as a multi-MCP aggregator |
+| `dvarapala init` | Scaffold `~/.dvarapala/policy.yaml` |
+| `dvarapala lint POLICY` | Validate a policy file |
+| `dvarapala test --case FILE` | Run an attack-corpus case against a policy |
+| `dvarapala scan --command CMD` | One-shot security audit of any MCP server |
+| `dvarapala install --client CLIENT --server NAME --command CMD` | Auto-edit MCP-client config |
+| `dvarapala doctor` | Diagnose installation, policy, sidecars, configs |
+| `dvarapala logs [-f]` | Pretty-print or tail the audit log |
+| `dvarapala version` | Print version info |
 
-In your Claude Desktop config, wrap any MCP server:
+Full flag reference: **[docs/cli-reference.md](docs/cli-reference.md)**.
 
-```diff
- {
-   "mcpServers": {
-     "filesystem": {
--      "command": "npx",
--      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/data"]
-+      "command": "dvarapala",
-+      "args": [
-+        "wrap", "--policy", "~/.dvarapala/policy.yaml", "--",
-+        "npx", "-y", "@modelcontextprotocol/server-filesystem", "/data"
-+      ]
-     }
-   }
- }
-```
-
-That's it. Every tool call is now policy-checked.
-
-## Modes
-
-| Mode | Use case | Command |
-|---|---|---|
-| **Wrap** | Drop-in stdio wrapper for any MCP server | `dvarapala wrap -- <cmd>` |
-| **Proxy** | HTTP/SSE proxy for hosted MCP servers | `dvarapala proxy --upstream URL` |
-| **Hub** | Aggregator: many MCP servers behind one Dvarapala | `dvarapala hub --config hub.yaml` |
-| **Library** | Embed in your own Go/Python/TS MCP server | import `pkg/dvarapala` or SDK |
-
-## Policy example
-
-```yaml
-defaults:
-  - rulepack: pii
-  - rulepack: secrets
-  - rulepack: prompt-injection
-  - rulepack: tool-poisoning
-
-rules:
-  - name: block-prod-db-writes
-    match:
-      tool: postgres_query
-      args.dsn: "*prod*"
-      args.sql: "/INSERT|UPDATE|DELETE/i"
-    action: deny
-
-  - name: redact-pii-from-tool-output
-    match:
-      direction: outbound
-      content_matches: pii
-    action: redact
-
-  - name: human-approval-for-rm
-    match:
-      tool: shell_exec
-      args.command: "/rm\\s+-rf/"
-    action: require_human_approval
-```
-
-## What's borrowed (we don't reinvent)
+## What's borrowed
 
 | Concern | Library |
 |---|---|
-| Secrets detection | [gitleaks](https://github.com/gitleaks/gitleaks) (embedded as Go library) |
-| PII / PHI / PCI | [Microsoft Presidio](https://github.com/microsoft/presidio) (sidecar) |
-| Prompt injection | [llm-guard](https://github.com/protectai/llm-guard) + [Meta Prompt-Guard](https://huggingface.co/meta-llama/Prompt-Guard-86M) |
-| Policy engine | [Open Policy Agent / Rego](https://www.openpolicyagent.org/) |
+| Secrets | [gitleaks](https://github.com/gitleaks/gitleaks) |
+| PII / PHI / PCI | [Microsoft Presidio](https://github.com/microsoft/presidio) |
+| Prompt injection | [ProtectAI llm-guard](https://github.com/protectai/llm-guard) + [Meta Prompt-Guard](https://huggingface.co/meta-llama/Prompt-Guard-86M) |
 | MCP protocol | [mark3labs/mcp-go](https://github.com/mark3labs/mcp-go) |
-| Schema validation | JSON Schema |
 | Red-team corpus | [garak](https://github.com/NVIDIA/garak), [PyRIT](https://github.com/Azure/PyRIT) |
 | Release pipeline | [GoReleaser](https://goreleaser.com) |
 
-## What's novel (Dvarapala's contribution)
-
-1. **MCP-specific attack taxonomy and detectors** — tool-poisoning, line-jumping, tool-mutation, IPI-via-tool-outputs, excessive-agency chain detection.
-2. **MCP protocol-aware proxy** — stdio / SSE / Streamable-HTTP interception.
-3. **Composition layer** — orchestrating Presidio + gitleaks + llm-guard + OPA into a single MCP enforcement plane.
-4. **Benchmark dataset** — 200+ curated MCP attack scenarios.
-
-## Distribution
-
-| Channel | Install |
-|---|---|
-| Homebrew (mac, linux) | `brew install tharvid/dvarapala/dvarapala` |
-| Scoop (windows) | `scoop install dvarapala` |
-| Chocolatey (windows) | `choco install dvarapala` |
-| APT (debian, ubuntu) | `apt install dvarapala` |
-| RPM (fedora, rhel) | `dnf install dvarapala` |
-| Docker | `docker pull ghcr.io/tharvid/dvarapala` |
-| Python SDK | `pip install dvarapala` |
-| TypeScript SDK | `npm i @dvarapala/sdk` |
-| Go (binary) | `go install github.com/tharvid/dvarapala/cmd/dvarapala@latest` |
-
 ## Status
 
-Pre-alpha. Active development. See [TODO.md](TODO.md) for the roadmap.
+- ✅ **v0.1.1** — production-grade detection for Phase 1–6 features
+- ✅ **5/5 attack-corpus cases pass** end-to-end (rm -rf, indirect prompt injection, secrets exfil, tool poisoning, tool rug-pull)
+- ✅ **CI green** on linux/macOS/windows
+- ✅ **Three install paths live**: brew, scoop, docker
+- 🚧 v0.1.2: APT repo (real `apt install dvarapala`)
+- 🚧 Phase 7: rate limits, human-approval flow, OpenTelemetry, web UI
+
+See [TODO.md](TODO.md) for the full roadmap.
+
+## Documentation
+
+| Doc | What's in it |
+|---|---|
+| **[Getting started](docs/getting-started.md)** | First-run walkthrough |
+| **[Architecture](docs/architecture.md)** | How the engine, detectors, transports fit together |
+| **[CLI reference](docs/cli-reference.md)** | Every command, every flag |
+| **[Policy language](docs/policy-language.md)** | YAML schema, match conditions, actions |
+| **[Built-in rule packs](docs/built-in-rules.md)** | What each rulepack does and why |
+| **[Deploy: Claude Code](docs/deployment/claude-code.md)** | Primary use case |
+| **[Deploy: Claude Desktop](docs/deployment/claude-desktop.md)** | macOS / Windows app |
+| **[Deploy: Cursor](docs/deployment/cursor.md)** | Cursor IDE |
+| **[Deploy: Cline](docs/deployment/cline.md)** | VSCode extension |
+| **[Deploy: Docker](docs/deployment/docker.md)** | Container + sidecars (Presidio, llm-guard) |
+| **[Deploy: Kubernetes](docs/deployment/kubernetes.md)** | Sidecar + hub manifests |
+
+## Contributing
+
+Bug reports, attack-corpus contributions, and rule-pack PRs welcome. See **[CONTRIBUTING.md](CONTRIBUTING.md)** and **[SECURITY.md](SECURITY.md)** for the security disclosure process.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+[MIT](LICENSE).
+
+---
+
+Built by [TharVid](https://tharvid.in).
