@@ -17,8 +17,8 @@ import (
 //
 // Two modes:
 //
-//   --wrap-all                            wrap every existing stdio MCP at once.
-//   --server NAME --command "CMD ARGS"    add (or replace) a single server.
+//	--wrap-all                            wrap every existing stdio MCP at once.
+//	--server NAME --command "CMD ARGS"    add (or replace) a single server.
 //
 // A backup is always written next to the config before editing.
 func cmdInstall(_ context.Context, args []string) error {
