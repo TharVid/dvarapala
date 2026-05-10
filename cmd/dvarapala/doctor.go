@@ -22,19 +22,25 @@ import (
 func cmdDoctor(_ context.Context, _ []string) error {
 	checks := []checkResult{}
 	defer func() {
-		// Final summary line so an automation can `dvarapala doctor | tail -1`.
-		failed := 0
+		// Summary line. Skips do not count as failures.
+		failed, skipped := 0, 0
 		for _, c := range checks {
-			if !c.ok {
+			switch c.status {
+			case statusFail:
 				failed++
+			case statusSkip:
+				skipped++
 			}
 		}
-		if failed == 0 {
-			fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "")
+		switch {
+		case failed > 0:
+			fmt.Fprintf(os.Stderr, "%d check(s) failed, %d skipped. See details above.\n", failed, skipped)
+		case skipped > 0:
+			fmt.Fprintf(os.Stderr, "All required checks passed (%d optional skipped).\n", skipped)
+		default:
 			fmt.Fprintln(os.Stderr, "All checks passed.")
-			return
 		}
-		fmt.Fprintf(os.Stderr, "\n%d check(s) failed. See details above.\n", failed)
 	}()
 
 	checks = append(checks, runCheck("dvarapala version", func() (string, error) {
@@ -89,20 +95,22 @@ func cmdDoctor(_ context.Context, _ []string) error {
 		return auditDir, nil
 	}))
 
-	checks = append(checks, runCheck("Presidio sidecar (DVARAPALA_PRESIDIO_URL)", func() (string, error) {
+	checks = append(checks, runSoftCheck("Presidio sidecar (DVARAPALA_PRESIDIO_URL)", func() (string, bool, error) {
 		u := os.Getenv("DVARAPALA_PRESIDIO_URL")
 		if u == "" {
-			return "(not configured — PII detection disabled)", nil
+			return "skipped — set DVARAPALA_PRESIDIO_URL to enable PII detection", false, nil
 		}
-		return probeSidecar(u + "/recognizers")
+		s, err := probeSidecar(u + "/recognizers")
+		return s, true, err
 	}))
 
-	checks = append(checks, runCheck("llm-guard sidecar (DVARAPALA_LLMGUARD_URL)", func() (string, error) {
+	checks = append(checks, runSoftCheck("llm-guard sidecar (DVARAPALA_LLMGUARD_URL)", func() (string, bool, error) {
 		u := os.Getenv("DVARAPALA_LLMGUARD_URL")
 		if u == "" {
-			return "(not configured — prompt-injection detection disabled)", nil
+			return "skipped — set DVARAPALA_LLMGUARD_URL to enable prompt-injection detection", false, nil
 		}
-		return probeSidecar(u + "/healthz")
+		s, err := probeSidecar(u + "/healthz")
+		return s, true, err
 	}))
 
 	checks = append(checks, runCheck("known MCP client configs", func() (string, error) {
@@ -135,27 +143,49 @@ func cmdDoctor(_ context.Context, _ []string) error {
 	return nil
 }
 
+type checkStatus int
+
+const (
+	statusOK checkStatus = iota
+	statusFail
+	statusSkip // soft "not configured" — informational, not a failure
+)
+
 type checkResult struct {
-	name string
-	ok   bool
-	msg  string
-	err  error
+	name   string
+	status checkStatus
+	msg    string
+	err    error
 }
 
 func runCheck(name string, fn func() (string, error)) checkResult {
 	msg, err := fn()
-	return checkResult{name: name, ok: err == nil, msg: msg, err: err}
+	if err != nil {
+		return checkResult{name: name, status: statusFail, err: err}
+	}
+	return checkResult{name: name, status: statusOK, msg: msg}
+}
+
+// runSoftCheck marks "not configured" results as skip rather than ok.
+func runSoftCheck(name string, fn func() (string, bool, error)) checkResult {
+	msg, configured, err := fn()
+	if err != nil {
+		return checkResult{name: name, status: statusFail, err: err}
+	}
+	if !configured {
+		return checkResult{name: name, status: statusSkip, msg: msg}
+	}
+	return checkResult{name: name, status: statusOK, msg: msg}
 }
 
 func (c checkResult) print() {
-	mark := "✓"
-	if !c.ok {
-		mark = "✗"
-	}
-	if c.ok {
-		fmt.Fprintf(os.Stderr, "  %s  %-50s %s\n", mark, c.name, c.msg)
-	} else {
-		fmt.Fprintf(os.Stderr, "  %s  %-50s %v\n", mark, c.name, c.err)
+	switch c.status {
+	case statusOK:
+		fmt.Fprintf(os.Stderr, "  \033[32m✓\033[0m  %-50s %s\n", c.name, c.msg)
+	case statusFail:
+		fmt.Fprintf(os.Stderr, "  \033[31m✗\033[0m  %-50s %v\n", c.name, c.err)
+	case statusSkip:
+		fmt.Fprintf(os.Stderr, "  \033[2m○\033[0m  %-50s \033[2m%s\033[0m\n", c.name, c.msg)
 	}
 }
 
