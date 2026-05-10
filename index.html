@@ -93,9 +93,16 @@
     padding: 18px 22px; text-align: left; font-size: 14px;
     box-shadow: 0 8px 32px rgba(0,0,0,0.4);
   }
-  .install-tabs { display: flex; gap: 16px; margin-bottom: 12px; font-size: 12px; color: var(--dim); border-bottom: 1px solid var(--border); padding-bottom: 8px; }
-  .install-tab { cursor: default; }
-  .install-tab.active { color: var(--accent); }
+  .install-tabs { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 0; }
+  .install-tab {
+    background: none; border: 0; border-bottom: 2px solid transparent;
+    padding: 6px 12px; font: inherit; font-size: 12px;
+    color: var(--dim); cursor: pointer; transition: color 0.15s, border-color 0.15s;
+    margin-bottom: -1px;
+  }
+  .install-tab:hover { color: var(--fg); }
+  .install-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .install-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
   .install pre { margin: 0; color: var(--fg); white-space: pre-wrap; }
   .install pre .prompt { color: var(--teal); user-select: none; }
   .install pre .comment { color: var(--dim); }
@@ -195,15 +202,26 @@
       <a class="btn btn-ghost" href="https://github.com/TharVid/dvarapala">View on GitHub</a>
     </div>
     <div class="install" id="install">
-      <div class="install-tabs">
-        <span class="install-tab active">macOS / Linux</span>
-        <span class="install-tab">Windows</span>
-        <span class="install-tab">Docker</span>
+      <div class="install-tabs" role="tablist">
+        <button class="install-tab active" data-tab="brew" role="tab" aria-selected="true">macOS / Linux</button>
+        <button class="install-tab" data-tab="scoop" role="tab" aria-selected="false">Windows</button>
+        <button class="install-tab" data-tab="docker" role="tab" aria-selected="false">Docker</button>
       </div>
-<pre><span class="prompt">$</span> brew tap tharvid/dvarapala
+<pre class="install-pane" data-pane="brew"><span class="prompt">$</span> brew tap tharvid/dvarapala
 <span class="prompt">$</span> brew install dvarapala
 <span class="prompt">$</span> dvarapala install --client claude-code --wrap-all
 <span class="comment"># Done. Restart Claude Code; <code>dvarapala logs -f</code> to watch traffic.</span></pre>
+<pre class="install-pane" data-pane="scoop" hidden><span class="prompt">&gt;</span> scoop bucket add dvarapala https://github.com/TharVid/scoop-dvarapala
+<span class="prompt">&gt;</span> scoop install dvarapala
+<span class="prompt">&gt;</span> dvarapala install --client claude-desktop --wrap-all
+<span class="comment"># Restart the desktop app; <code>dvarapala logs -f</code> to watch traffic.</span></pre>
+<pre class="install-pane" data-pane="docker" hidden><span class="prompt">$</span> docker pull ghcr.io/tharvid/dvarapala:latest
+<span class="prompt">$</span> docker run --rm -i \
+    -v ~/.dvarapala:/root/.dvarapala \
+    ghcr.io/tharvid/dvarapala:latest \
+    wrap --policy /root/.dvarapala/policy.yaml -- \
+    npx -y @modelcontextprotocol/server-filesystem /workspace
+<span class="comment"># Multi-arch image (amd64 + arm64). Hub mode + sidecars: see docs/deployment/docker.md.</span></pre>
     </div>
   </div>
 </header>
@@ -334,6 +352,26 @@
     <p>Built by <a href="https://tharvid.in">TharVid</a>.</p>
   </div>
 </footer>
+
+<script>
+  (function () {
+    var tabs = document.querySelectorAll('.install-tab');
+    var panes = document.querySelectorAll('.install-pane');
+    tabs.forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        var name = tab.dataset.tab;
+        tabs.forEach(function (t) {
+          var on = t === tab;
+          t.classList.toggle('active', on);
+          t.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        panes.forEach(function (p) {
+          p.hidden = p.dataset.pane !== name;
+        });
+      });
+    });
+  })();
+</script>
 
 </body>
 </html>
