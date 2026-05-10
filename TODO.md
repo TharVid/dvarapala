@@ -27,7 +27,7 @@ Status as of `main`. Each feature ends with a tagged release.
 UI work is gated on a clean baseline. Fix these first:
 
 - [ ] **`dvarapala doctor`** auto-detect stale daemon records (process dead but file present) and offer cleanup
-- [ ] **Audit log rotation** — `~/.dvarapala/audit.jsonl` grows unbounded; size + age cap
+- [x] **Audit log rotation** — shipped in v0.1.8 (50 MiB × 5 keep, configurable via `--audit-max-mb` / `--audit-keep`; follow-mode survives rotation via inode-change detection)
 - [ ] **Policy hot-reload** — currently a wrap restart is needed when policy.yaml changes
 - [ ] **Configurable redaction string** — currently hardcoded `[REDACTED:rule-id]`; allow per-rule replacement (`***`, `<email>`, etc.)
 - [ ] **Egress allowlist enforcement** — listed in default rule pack as a scaffold but not actually enforced
