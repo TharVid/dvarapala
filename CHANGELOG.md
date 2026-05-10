@@ -5,6 +5,107 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6] — 2026-05-10
+
+### Changed
+
+- **`dvarapala logs`** rewritten with a human-readable formatter. Old
+  output was `request tools/call id=4` / `response - id=4` — useless
+  without manual id correlation and zero idea which tool was called.
+  New output extracts `(name, arguments)` from `tools/call` requests,
+  tracks id → method/tool across the stream, and shows the correlated
+  tool name + response excerpt on the matching outbound:
+
+  ```
+  09:35:16  →  allow   read_wiki_structure(repoName="facebook/react")
+  09:35:17  ←  allow   read_wiki_structure → Available pages for facebook/react: …
+  09:35:20  ←  redact  read_file → key=AKIAQYLPMN5HABCDEFGH
+                       // Secret in tool output redacted (gitleaks)
+                       [redact-secrets-in-tool-output]
+  ```
+
+  Counts `tools/list` responses (`← tools/list → 15 tools`). Always
+  renders deny / redact actions regardless of filter. Default-hides
+  handshake noise (`initialize`, `notifications/*`, `roots/list`,
+  `prompts/list`, `resources/list`, `tools/list_changed`,
+  `notifications/message`). Hides orphan responses (request scrolled
+  out of `-n` window) and blank-display events. Appends
+  `// reason  [rule-name]` on redacts/denies so the audit line reads
+  like an explanation, not a code dump.
+
+- New flags on `dvarapala logs`:
+  - `--all` — show every event including boilerplate
+  - `--deny` — show only deny / redact events
+  - `--methods M,M` — whitelist (overrides `--all`)
+  - `--exclude M,M` — add to the default hide list
+  - `--full` — include raw payload alongside formatted line
+
+## [0.1.5] — 2026-05-10
+
+### Fixed
+
+- **HTTP proxy path forwarding** for Streamable HTTP / SSE-then-POST
+  shapes. v0.1.3's proxy concatenated the client's request path onto
+  the full upstream URL — including the upstream's path. With an
+  upstream like `https://mcp.deepwiki.com/mcp` a client `POST /` would
+  target `https://mcp.deepwiki.com/mcp/`, and a `POST /messages?sessionId=ABC`
+  (advertised via SSE `endpoint` event) would target
+  `https://mcp.deepwiki.com/mcp/messages?sessionId=ABC` — both wrong,
+  both 404.
+
+  New routing in `httpRelay.upstreamForPOST`:
+
+  ```
+  GET /<anything>          → upstream.String()  (SSE/streamable opener)
+  POST /                   → upstream.String()  (single-endpoint streamable-HTTP)
+  POST /<advertised-path>  → upstream.Scheme + upstream.Host + client_path
+                             (the SSE-advertised endpoint)
+  ```
+
+  End-to-end verified against the live DeepWiki Streamable HTTP
+  endpoint at `https://mcp.deepwiki.com/mcp`.
+
+### Notes
+
+- DeepWiki has deprecated the SSE endpoint at `/sse` in favour of
+  Streamable HTTP at `/mcp`. Users with the old `--transport sse` URL
+  should re-register:
+
+  ```
+  claude mcp remove deepwiki -s user
+  claude mcp add    deepwiki --scope user --transport http \
+      https://mcp.deepwiki.com/mcp
+  dvarapala install --client claude-code --wrap-all
+  ```
+
+## [0.1.4] — 2026-05-10
+
+### Fixed
+
+- **`.bak` overwrite bug in `--wrap-all`.** `readConfigForEdit` was
+  unconditionally writing `<path>.bak`. After the first run the `.bak`
+  captured the user's original config (good); after the second run it
+  was overwritten with a config whose URLs already pointed at local
+  proxies — the original `https://…` URL was permanently lost and
+  rollback became impossible.
+
+  Fix: write `.bak` only when it doesn't exist yet (first-write-wins).
+  Also write a per-run snapshot at `<path>.bak.YYYYMMDD-HHMMSS` so
+  audit history is preserved without trampling the pristine `.bak`.
+
+- **Stale local URLs are now auto-recovered.** Previously, when
+  `--wrap-all` encountered an HTTP entry whose URL was already local
+  (e.g. `http://127.0.0.1:18080`) but had **no** matching daemon
+  record (because a prior `daemon stop-all` cleared records, or
+  because of the `.bak` overwrite bug above), the entry was silently
+  skipped — leaving the user with a config pointing at a dead local
+  proxy.
+
+  Fix: when the local URL has no daemon record, look in the pristine
+  `.bak` for the original upstream and spawn a fresh proxy from there.
+  If `.bak` is also stale (pre-fix runs), print a loud `WARNING` with
+  explicit recovery instructions.
+
 ## [0.1.3] — 2026-05-10
 
 ### Added
