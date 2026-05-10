@@ -115,6 +115,11 @@ func TestCompilePatternForms(t *testing.T) {
 		{`*foo*`, "bar", false},
 		{`exact`, "exact", true},
 		{`exact`, "Exact", false},
+		// Absolute-path globs must NOT be parsed as slash-regex.
+		{`/etc/*`, "/etc/passwd", true},
+		{`/etc/*`, "/var/log/foo", false},
+		{`*/.ssh/*`, "/Users/sunilkumar/.ssh/id_rsa", true},
+		{`*/.ssh/*`, "/Users/sunilkumar/code/main.go", false},
 	}
 	for _, c := range cases {
 		re, err := compilePattern(c.in)

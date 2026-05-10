@@ -177,8 +177,12 @@ func matchArgs(patterns map[string][]*regexp.Regexp, args map[string]string) boo
 //   - "/expr/i"       — slash-delimited regex with optional flags (i,m,s)
 //   - "*foo*"         — glob (translated to regex)
 //   - "literal"       — exact-string match (escaped)
+//
+// A leading '/' alone is not enough to make something a regex; any trailing
+// characters after the closing '/' must be valid flags (i,m,s). This avoids
+// misparsing absolute paths like "/etc/*" as a regex with flag "*".
 func compilePattern(p string) (*regexp.Regexp, error) {
-	if len(p) >= 2 && p[0] == '/' {
+	if isSlashRegex(p) {
 		return parseSlashRegex(p)
 	}
 	if strings.ContainsAny(p, "*?") {
@@ -187,29 +191,28 @@ func compilePattern(p string) (*regexp.Regexp, error) {
 	return regexp.Compile("^" + regexp.QuoteMeta(p) + "$")
 }
 
-func parseSlashRegex(p string) (*regexp.Regexp, error) {
-	// Find the last '/' to separate body from flags.
+func isSlashRegex(p string) bool {
+	if len(p) < 2 || p[0] != '/' {
+		return false
+	}
 	idx := strings.LastIndexByte(p[1:], '/')
 	if idx < 0 {
-		return nil, fmt.Errorf("malformed regex %q: missing closing /", p)
+		return false
 	}
-	body := p[1 : 1+idx]
-	flags := p[2+idx:]
-	prefix := ""
-	for _, f := range flags {
-		switch f {
-		case 'i':
-			prefix += "i"
-		case 'm':
-			prefix += "m"
-		case 's':
-			prefix += "s"
-		default:
-			return nil, fmt.Errorf("regex %q: unknown flag %q", p, string(f))
+	for _, f := range p[2+idx:] {
+		if f != 'i' && f != 'm' && f != 's' {
+			return false
 		}
 	}
-	if prefix != "" {
-		body = "(?" + prefix + ")" + body
+	return true
+}
+
+func parseSlashRegex(p string) (*regexp.Regexp, error) {
+	idx := strings.LastIndexByte(p[1:], '/')
+	body := p[1 : 1+idx]
+	flags := p[2+idx:]
+	if flags != "" {
+		body = "(?" + flags + ")" + body
 	}
 	return regexp.Compile(body)
 }
