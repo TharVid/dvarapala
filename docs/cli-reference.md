@@ -129,7 +129,31 @@ dvarapala scan --command "npx -y @some-org/maybe-evil-mcp"
 
 ## `dvarapala install`
 
-Auto-edit an MCP-client config to wrap an upstream server with `dvarapala wrap`.
+Auto-edit an MCP-client config to wrap MCP server entries with `dvarapala wrap`. Two modes:
+
+### `--wrap-all` (recommended)
+
+Reads the client's existing config, wraps every stdio MCP server in one shot, leaves already-wrapped entries alone, and skips HTTP/URL-based servers (use `proxy` for those).
+
+```bash
+dvarapala install --client claude-code --wrap-all
+dvarapala install --client claude-desktop --wrap-all
+dvarapala install --client cursor --wrap-all
+dvarapala install --client cline  --wrap-all
+```
+
+| Flag | Default | Purpose |
+|---|---|---|
+| `--client` | `claude-code` | `claude-code` / `claude-desktop` / `cursor` / `cline` |
+| `--wrap-all` | false | Wrap every stdio MCP server in the client's config |
+| `--policy PATH` | `~/.dvarapala/policy.yaml` | Policy YAML to apply |
+| `--binary PATH` | this dvarapala | Dvarapala binary path |
+
+Idempotent — re-run after `claude mcp add` to wrap any newly added server.
+
+### Single-server mode
+
+For adding/replacing one entry by name:
 
 ```bash
 dvarapala install --client CLIENT --server NAME --command "CMD ARGS..."
@@ -137,13 +161,10 @@ dvarapala install --client CLIENT --server NAME --command "CMD ARGS..."
 
 | Flag | Default | Purpose |
 |---|---|---|
-| `--client` | `claude-code` | One of `claude-code` / `claude-desktop` / `cursor` / `cline` |
 | `--server NAME` | (required) | Name to register |
 | `--command STR` | (required) | Upstream MCP command |
-| `--policy PATH` | `~/.dvarapala/policy.yaml` | Policy YAML to apply |
-| `--binary PATH` | this dvarapala | Dvarapala binary path |
 
-Backs the existing config up to `<file>.bak` before editing. Idempotent — re-running with same name updates the entry.
+Both modes back the existing config up to `<file>.bak` before editing.
 
 ## `dvarapala doctor`
 

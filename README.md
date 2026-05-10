@@ -62,14 +62,21 @@ dvarapala init
 # 2. Health-check
 dvarapala doctor
 
-# 3. Wire it into Claude Code (one-shot)
-dvarapala install \
-  --client claude-code \
-  --server filesystem \
-  --command "npx -y @modelcontextprotocol/server-filesystem ~"
+# 3. Wrap every existing MCP server in your Claude Code config in one shot
+dvarapala install --client claude-code --wrap-all
 
-# 4. Start Claude Code, ask it to read a file, then in another terminal
+# 4. Restart Claude Code, then in another terminal watch traffic
 dvarapala logs -f
+```
+
+`--wrap-all` reads `~/.claude.json`, finds every stdio MCP server, and rewrites each entry to route through `dvarapala wrap` with your policy. HTTP-based servers (claude.ai-managed Atlassian, Sentry, etc.) are skipped with a note pointing to `dvarapala proxy`. Already-wrapped entries are left alone — re-running is a no-op.
+
+Same flag works for the other clients:
+
+```bash
+dvarapala install --client claude-desktop --wrap-all
+dvarapala install --client cursor         --wrap-all
+dvarapala install --client cline          --wrap-all
 ```
 
 You'll see every JSON-RPC message Claude Code sends to the filesystem MCP server flow through the gateway, with `action=allow` / `deny` / `redact` per the policy. Try asking Claude to read a file containing fake AWS keys — the gateway redacts them before the LLM ever sees them.

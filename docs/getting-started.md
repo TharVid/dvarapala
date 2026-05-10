@@ -38,32 +38,24 @@ You should see ✓ for: binary on PATH, policy file present, policy parse + comp
 
 ## Wire into your MCP client
 
-`dvarapala install` edits the right config file with one command. Pick your client — full guides in [docs/deployment/](deployment/).
+If you already have MCP servers configured, **wrap them all in one shot**:
 
 ```bash
-# Claude Code
+dvarapala install --client claude-code   --wrap-all
+dvarapala install --client claude-desktop --wrap-all
+dvarapala install --client cursor         --wrap-all
+dvarapala install --client cline          --wrap-all
+```
+
+`--wrap-all` reads the client's config, finds every stdio MCP server, and rewrites each entry to route through Dvarapala. HTTP-based servers (claude.ai-managed cloud MCPs) are skipped with a note pointing at `dvarapala proxy`. Already-wrapped entries are left alone (idempotent — re-run anytime you add a new server).
+
+If you don't have any MCPs yet, add one fresh:
+
+```bash
 dvarapala install \
   --client claude-code \
   --server filesystem \
   --command "npx -y @modelcontextprotocol/server-filesystem ~"
-
-# Claude Desktop
-dvarapala install \
-  --client claude-desktop \
-  --server filesystem \
-  --command "npx -y @modelcontextprotocol/server-filesystem ~"
-
-# Cursor
-dvarapala install \
-  --client cursor \
-  --server github \
-  --command "npx -y @modelcontextprotocol/server-github"
-
-# Cline
-dvarapala install \
-  --client cline \
-  --server postgres \
-  --command "npx -y @modelcontextprotocol/server-postgres postgresql://..."
 ```
 
 The installer backs up the existing config to `<file>.bak` before editing. Restart the client to pick up the change.

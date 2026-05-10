@@ -2,7 +2,23 @@
 
 Claude Code reads MCP servers from `~/.claude.json` (user-scope, applies to every project). Dvarapala ships with first-class support — `dvarapala install --client claude-code` edits the file in place with a backup.
 
-## Quick install
+## Wrap everything in one shot (recommended)
+
+If you already have MCP servers configured in Claude Code, use `--wrap-all`:
+
+```bash
+dvarapala install --client claude-code --wrap-all
+```
+
+That reads `~/.claude.json`, finds every stdio MCP server, and rewrites each entry to route through `dvarapala wrap`. Already-wrapped entries are left alone (idempotent). HTTP-based servers (the cloud ones managed by claude.ai — Atlassian, Sentry, Slack, etc.) are skipped with a note pointing to `dvarapala proxy`.
+
+Restart Claude Code so the new child processes spawn with Dvarapala in front.
+
+Re-run `dvarapala install --client claude-code --wrap-all` any time you `claude mcp add` a new stdio server — the new entry gets wrapped, existing wrapped ones stay as-is.
+
+## Single-server install
+
+If you don't have an entry yet (or want to add one fresh):
 
 ```bash
 dvarapala install \
@@ -11,7 +27,7 @@ dvarapala install \
   --command "npx -y @modelcontextprotocol/server-filesystem ~"
 ```
 
-This adds an entry under `mcpServers.filesystem` that wraps the filesystem MCP with `dvarapala wrap --policy ~/.dvarapala/policy.yaml`. Restart Claude Code (or start a fresh session) and Claude can now read files via the gateway.
+This adds an entry under `mcpServers.filesystem` that wraps the filesystem MCP with `dvarapala wrap --policy ~/.dvarapala/policy.yaml`. Restart Claude Code.
 
 ## Verify
 
