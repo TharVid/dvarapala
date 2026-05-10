@@ -150,6 +150,7 @@ See **[docs/built-in-rules.md](docs/built-in-rules.md)** for rule packs and **[d
 | `dvarapala doctor` | Diagnose installation, policy, sidecars, configs |
 | `dvarapala daemon list \| stop NAME \| stop-all \| remove NAME \| clean` | Manage background HTTP-proxy daemons spawned by `--wrap-all` |
 | `dvarapala logs [-f]` | Pretty-print or tail the audit log |
+| `dvarapala ui` | Serve a local web view of the audit log (live, read-only) |
 | `dvarapala version` | Print version info |
 
 Full flag reference: **[docs/cli-reference.md](docs/cli-reference.md)**.

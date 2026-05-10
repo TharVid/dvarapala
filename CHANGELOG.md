@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.12] — 2026-05-10
+
+### Added
+
+- **`dvarapala ui` — read-only web view of the audit log.** Single
+  static binary, zero new deps (stdlib `net/http` + `embed` only).
+  Default bind is `127.0.0.1:9090`; the UI is read-only by design
+  (no API endpoint mutates state) and never exposed off-host unless
+  you re-bind explicitly.
+
+  Layout:
+
+  - **Live table** — every JSON-RPC event in chronological order,
+    auto-scrolling unless you've scrolled up. Time / Server / Dir /
+    Action / Tool · Args · Excerpt columns, mirroring the
+    `dvarapala logs` formatter.
+  - **Filters** — server dropdown (auto-populated from the stream),
+    action dropdown, free-text search across tool / args / reason /
+    rule, "deny / redact only" toggle, "hide noise" toggle.
+  - **Click-to-expand drawer** — full request/response payload as
+    formatted JSON with light syntax highlighting, plus the
+    matching rule, reason, and direction metadata.
+  - **Live indicator** — green pulse when the SSE stream is
+    connected, red when disconnected (browser auto-reconnects).
+
+  Wire protocol: `GET /api/events/recent?n=500` returns a JSON
+  array of the last N audit events (used on initial page load);
+  `GET /api/events/stream` is a Server-Sent Events feed of live
+  events. The tailer is inode-aware and survives an audit log
+  rotation transparently.
+
+  ```bash
+  dvarapala ui                              # default 127.0.0.1:9090
+  dvarapala ui --listen 127.0.0.1:9091      # alternate port
+  dvarapala ui --audit /tmp/other.jsonl     # tail a different file
+  ```
+
 ## [0.1.11] — 2026-05-10
 
 ### Added

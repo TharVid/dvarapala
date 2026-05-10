@@ -37,7 +37,7 @@ UI work is gated on a clean baseline. Fix these first:
 
 | Feature | What it unlocks | Effort |
 |---|---|---|
-| **Read-only web UI** | Live event stream, search, filter by server/method/action, full request + response payload viewer, deny/redact stats | ~1 week |
+| ~~**Read-only web UI**~~ | ✅ shipped v0.1.12 — `dvarapala ui` serves live event stream + payload drawer at `127.0.0.1:9090` (zero new deps; stdlib `net/http` + `embed`) | done |
 | **Rate limits** | Per-tool, per-rule, per-session caps — runaway tool calls are both cost and DoS risks | ~2 days |
 | **Human-approval flow** | Mark sensitive tools as needing user OK before execution; gateway pauses + prompts | ~3 days |
 | **OpenTelemetry export** | Spans for every JSON-RPC message → Jaeger / Honeycomb / Datadog | ~1 day |

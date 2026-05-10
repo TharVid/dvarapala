@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dvarapala — audit</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23f4a738'/%3E%3Ctext x='32' y='44' text-anchor='middle' font-family='serif' font-size='40' font-weight='700' fill='%230a0e14'%3Eद%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #0a0e14;
+    --bg-2: #11161e;
+    --bg-3: #1a212c;
+    --fg: #e8e6e1;
+    --dim: #7a8194;
+    --accent: #f4a738;
+    --teal: #5eb3a8;
+    --red: #e07b6e;
+    --green: #82c878;
+    --purple: #b389e0;
+    --blue: #5b9cf2;
+    --border: rgba(255,255,255,0.08);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg); color: var(--fg);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  code, pre, .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, monospace; }
+
+  /* layout */
+  .app { display: grid; grid-template-rows: auto 1fr; height: 100vh; }
+  header.bar {
+    display: flex; align-items: center; gap: 16px;
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+    background: var(--bg-2);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; }
+  .brand-mark {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: 5px;
+    background: var(--accent); color: var(--bg);
+    font-family: serif; font-weight: 700; font-size: 16px;
+  }
+  .filters { display: flex; align-items: center; gap: 8px; flex: 1; flex-wrap: wrap; }
+  .filters input, .filters select {
+    background: var(--bg-3); border: 1px solid var(--border); color: var(--fg);
+    padding: 6px 10px; border-radius: 6px; font: inherit; font-size: 13px;
+  }
+  .filters input:focus, .filters select:focus { outline: 1px solid var(--accent); outline-offset: 0; }
+  .filters input.search { flex: 1; min-width: 180px; }
+  .filters .label { color: var(--dim); font-size: 12px; }
+  .filters .count { color: var(--dim); font-size: 12px; margin-left: auto; }
+  .live-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--green); animation: pulse 2s infinite;
+  }
+  .live-dot.disconnected { background: var(--red); animation: none; }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(130,200,120,0.6); }
+    70%  { box-shadow: 0 0 0 6px rgba(130,200,120,0); }
+    100% { box-shadow: 0 0 0 0 rgba(130,200,120,0); }
+  }
+  .btn {
+    background: transparent; color: var(--fg); border: 1px solid var(--border);
+    padding: 6px 10px; border-radius: 6px; cursor: pointer; font: inherit; font-size: 12px;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+
+  /* main split — table left, drawer right */
+  main { display: grid; grid-template-columns: 1fr; overflow: hidden; }
+  main.with-drawer { grid-template-columns: 1fr 520px; }
+  @media (max-width: 900px) {
+    main.with-drawer { grid-template-columns: 1fr; }
+    aside.drawer { position: fixed; right: 0; top: 0; bottom: 0; width: 100%; max-width: 520px; z-index: 5; box-shadow: -8px 0 32px rgba(0,0,0,0.5); }
+  }
+  .table-wrap { overflow: auto; }
+
+  table {
+    width: 100%; border-collapse: collapse;
+    font-size: 13px;
+  }
+  thead th {
+    position: sticky; top: 0;
+    background: var(--bg-2); border-bottom: 1px solid var(--border);
+    text-align: left; padding: 8px 12px;
+    font-weight: 500; color: var(--dim); font-size: 11px;
+    letter-spacing: 0.5px; text-transform: uppercase; user-select: none;
+  }
+  tbody tr { border-bottom: 1px solid var(--border); cursor: pointer; }
+  tbody tr:hover { background: var(--bg-2); }
+  tbody tr.selected { background: rgba(244,167,56,0.08); }
+  tbody td { padding: 7px 12px; vertical-align: top; }
+  td.ts { color: var(--dim); font-family: ui-monospace, monospace; white-space: nowrap; }
+  td.server { font-family: ui-monospace, monospace; color: var(--purple); white-space: nowrap; }
+  td.dir { text-align: center; width: 30px; }
+  td.dir.in { color: var(--blue); }
+  td.dir.out { color: var(--teal); }
+  td.action { font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; }
+  td.action.allow { color: var(--green); }
+  td.action.deny { color: var(--red); }
+  td.action.redact { color: var(--accent); }
+  td.display { font-family: ui-monospace, monospace; word-break: break-word; }
+  td.display .tool { color: var(--accent); font-weight: 600; }
+  td.display .reason { color: var(--dim); font-size: 12px; display: block; margin-top: 2px; }
+  td.display .rule { color: var(--dim); font-size: 11px; padding: 1px 6px; border: 1px solid var(--border); border-radius: 3px; margin-left: 6px; }
+
+  .empty { padding: 60px 20px; text-align: center; color: var(--dim); }
+  .empty .big { font-size: 64px; opacity: 0.3; }
+  .empty .hint { margin-top: 12px; font-size: 13px; }
+
+  /* drawer */
+  aside.drawer {
+    background: var(--bg-2); border-left: 1px solid var(--border);
+    overflow-y: auto; padding: 18px 20px;
+  }
+  aside.drawer .close {
+    position: sticky; top: 0; float: right;
+    background: var(--bg-2); border: 1px solid var(--border); color: var(--fg);
+    width: 28px; height: 28px; border-radius: 6px; cursor: pointer;
+    font-size: 18px; line-height: 24px; padding: 0;
+  }
+  aside.drawer h2 { margin: 0 0 4px; font-size: 14px; }
+  aside.drawer .sub { color: var(--dim); font-size: 12px; margin-bottom: 16px; }
+  aside.drawer h3 {
+    margin: 18px 0 6px; font-size: 11px; color: var(--dim);
+    text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500;
+  }
+  aside.drawer .field { display: flex; gap: 12px; padding: 4px 0; font-size: 13px; }
+  aside.drawer .field .k { color: var(--dim); width: 90px; flex-shrink: 0; }
+  aside.drawer .field .v { word-break: break-all; }
+  aside.drawer pre.payload {
+    margin: 0; padding: 14px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    overflow-x: auto; font-size: 12px; line-height: 1.6;
+    white-space: pre-wrap; word-wrap: break-word;
+    max-height: 60vh;
+  }
+  /* JSON syntax highlighting (very light-touch) */
+  .j-key { color: var(--purple); }
+  .j-str { color: var(--teal); }
+  .j-num { color: var(--accent); }
+  .j-bool, .j-null { color: var(--blue); }
+
+  /* scrollbars (webkit) */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--dim); }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header class="bar">
+    <div class="brand">
+      <span class="brand-mark">द</span>
+      Dvarapala <span style="color:var(--dim); font-weight:400; font-size:13px;">audit</span>
+    </div>
+    <div class="filters">
+      <span class="live-dot" id="live-dot" title="connecting…"></span>
+      <input class="search" id="filter-search" placeholder="Search tool / args / reason…">
+      <select id="filter-server"><option value="">all servers</option></select>
+      <select id="filter-action">
+        <option value="">all actions</option>
+        <option value="allow">allow</option>
+        <option value="deny">deny</option>
+        <option value="redact">redact</option>
+      </select>
+      <button class="btn" id="filter-deny-only">deny / redact only</button>
+      <button class="btn active" id="filter-hide-noise" title="Hide initialize / notifications/* / */list noise">hide noise</button>
+      <span class="count" id="count"></span>
+    </div>
+  </header>
+
+  <main id="main">
+    <div class="table-wrap" id="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:80px">Time</th>
+            <th style="width:120px">Server</th>
+            <th>Dir</th>
+            <th style="width:80px">Action</th>
+            <th>Tool · Args · Excerpt</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div class="empty" id="empty" hidden>
+        <div class="big">द</div>
+        <div>Waiting for the first audit event…</div>
+        <div class="hint">Trigger a tool call in your MCP client to populate this table.</div>
+      </div>
+    </div>
+    <aside class="drawer" id="drawer" hidden>
+      <button class="close" id="drawer-close" title="close">×</button>
+      <h2 id="d-title">—</h2>
+      <div class="sub" id="d-sub">—</div>
+
+      <h3>Event</h3>
+      <div class="field"><span class="k">time</span><span class="v" id="d-ts"></span></div>
+      <div class="field"><span class="k">server</span><span class="v mono" id="d-server"></span></div>
+      <div class="field"><span class="k">direction</span><span class="v" id="d-dir"></span></div>
+      <div class="field"><span class="k">action</span><span class="v" id="d-action"></span></div>
+      <div class="field"><span class="k">method</span><span class="v mono" id="d-method"></span></div>
+      <div class="field"><span class="k">id</span><span class="v mono" id="d-id"></span></div>
+      <div class="field" id="d-tool-row" hidden><span class="k">tool</span><span class="v mono" id="d-tool"></span></div>
+      <div class="field" id="d-reason-row" hidden><span class="k">reason</span><span class="v" id="d-reason"></span></div>
+      <div class="field" id="d-rule-row" hidden><span class="k">rule</span><span class="v mono" id="d-rule"></span></div>
+
+      <h3>Payload</h3>
+      <pre class="payload" id="d-payload"></pre>
+    </aside>
+  </main>
+</div>
+
+<script>
+(() => {
+  // ---- audit-log noise filter (mirrors cmd/dvarapala/logs.go) ----
+  const NOISE = new Set([
+    'initialize',
+    'notifications/initialized',
+    'notifications/tools/list_changed',
+    'notifications/resources/list_changed',
+    'notifications/prompts/list_changed',
+    'notifications/message',
+    'roots/list',
+    'prompts/list',
+    'resources/list',
+  ]);
+
+  // Bounded ring of events we know about. Newer at the end.
+  const MAX = 5000;
+  const events = [];
+  const methodByID = {};   // id-string → method name (for response correlation)
+  const toolByID   = {};   // id-string → tool name  (tools/call requests)
+
+  // Filter state.
+  const F = {
+    search: '',
+    server: '',
+    action: '',
+    denyOnly: false,
+    hideNoise: true,
+  };
+
+  // ---- DOM refs ----
+  const $rows         = document.getElementById('rows');
+  const $empty        = document.getElementById('empty');
+  const $count        = document.getElementById('count');
+  const $main         = document.getElementById('main');
+  const $drawer       = document.getElementById('drawer');
+  const $drawerClose  = document.getElementById('drawer-close');
+  const $serverSelect = document.getElementById('filter-server');
+  const $actionSelect = document.getElementById('filter-action');
+  const $searchInput  = document.getElementById('filter-search');
+  const $denyOnlyBtn  = document.getElementById('filter-deny-only');
+  const $hideNoiseBtn = document.getElementById('filter-hide-noise');
+  const $liveDot      = document.getElementById('live-dot');
+
+  // ---- enrich an audit event with extracted tool/args/excerpt ----
+  function enrich(e) {
+    const idStr = e.id !== undefined ? JSON.stringify(e.id) : '';
+    if (e.method && idStr && e.direction === 'inbound') {
+      methodByID[idStr] = e.method;
+    }
+    let display, tool, effective;
+    const p = e.payload || {};
+    if (e.direction === 'inbound') {
+      if (e.method === 'tools/call' && p.params && p.params.name) {
+        tool = p.params.name;
+        if (idStr) toolByID[idStr] = tool;
+        const args = p.params.arguments || {};
+        display = `${tool}(${formatArgs(args)})`;
+        effective = 'tools/call';
+      } else {
+        display = e.method || '';
+        effective = e.method || '';
+      }
+    } else {
+      // outbound
+      const m = methodByID[idStr];
+      const t = toolByID[idStr];
+      if (t) {
+        delete toolByID[idStr];
+        delete methodByID[idStr];
+        const ex = parseToolCallResponse(p);
+        display = ex ? `${t} → ${ex}` : `${t} → (response)`;
+        tool = t;
+        effective = 'tools/call';
+      } else if (m === 'tools/list') {
+        delete methodByID[idStr];
+        const n = countTools(p);
+        display = n >= 0 ? `tools/list → ${n} tools` : 'tools/list (response)';
+        effective = 'tools/list';
+      } else if (m) {
+        delete methodByID[idStr];
+        display = `${m} (response)`;
+        effective = m;
+      } else if (e.method) {
+        // server-initiated request
+        display = e.method;
+        effective = e.method;
+      } else {
+        display = `response id=${idStr || '?'}`;
+        effective = '';
+      }
+    }
+    e._display = display;
+    e._tool = tool || '';
+    e._effective = effective;
+  }
+
+  function formatArgs(args) {
+    if (!args || typeof args !== 'object') return '';
+    const parts = [];
+    for (const k of Object.keys(args)) {
+      const v = args[k];
+      let s;
+      if (typeof v === 'string') s = JSON.stringify(v);
+      else s = JSON.stringify(v);
+      if (s.length > 60) s = s.slice(0, 59) + '…';
+      parts.push(`${k}=${s}`);
+    }
+    return parts.join(', ');
+  }
+
+  function parseToolCallResponse(p) {
+    if (!p || !p.result) {
+      if (p && p.error) {
+        return `error ${p.error.code}: ${trunc(p.error.message || '', 80)}`;
+      }
+      return '';
+    }
+    const c = p.result.content;
+    if (Array.isArray(c)) {
+      for (const item of c) {
+        if (item && item.type === 'text' && item.text) {
+          return trunc(String(item.text).replace(/\n/g, ' '), 80);
+        }
+      }
+    }
+    return '';
+  }
+
+  function countTools(p) {
+    if (p && p.result && Array.isArray(p.result.tools)) return p.result.tools.length;
+    return -1;
+  }
+
+  function trunc(s, n) {
+    if (!s) return '';
+    return s.length <= n ? s : s.slice(0, n - 1) + '…';
+  }
+
+  // ---- filter + render ----
+  function shouldShow(e) {
+    if (F.denyOnly && e.action !== 'deny' && e.action !== 'redact') return false;
+    if (F.hideNoise && e.action !== 'deny' && e.action !== 'redact') {
+      if (NOISE.has(e._effective)) return false;
+      if (!e._display) return false;
+      if (e.direction === 'outbound' && !e._effective) return false;
+    }
+    if (F.server && e.server !== F.server) return false;
+    if (F.action && e.action !== F.action) return false;
+    if (F.search) {
+      const hay = `${e._display} ${e.reason || ''} ${e.method || ''} ${e._tool || ''} ${e.server || ''}`.toLowerCase();
+      if (!hay.includes(F.search)) return false;
+    }
+    return true;
+  }
+
+  function render() {
+    // Render in chronological order (oldest at top, newest at bottom)
+    // — same as `dvarapala logs`. Auto-scroll to bottom unless user
+    // has scrolled up.
+    const wrap = document.getElementById('table-wrap');
+    const wasAtBottom = wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - 8;
+
+    const frag = document.createDocumentFragment();
+    let visible = 0;
+    for (const e of events) {
+      if (!shouldShow(e)) continue;
+      visible++;
+      frag.appendChild(rowEl(e));
+    }
+    $rows.replaceChildren(frag);
+    $count.textContent = `${visible} / ${events.length}`;
+    $empty.hidden = visible > 0;
+
+    if (wasAtBottom) wrap.scrollTop = wrap.scrollHeight;
+  }
+
+  function rowEl(e) {
+    const tr = document.createElement('tr');
+    tr.dataset.eventIdx = events.indexOf(e);
+    if (e._selected) tr.classList.add('selected');
+
+    const ts = (e.ts || '').slice(11, 19);
+    const dirChar = e.direction === 'outbound' ? '←' : '→';
+    const dirCls  = e.direction === 'outbound' ? 'out' : 'in';
+
+    tr.innerHTML = `
+      <td class="ts">${ts}</td>
+      <td class="server">${escapeHTML(e.server || '?')}</td>
+      <td class="dir ${dirCls}">${dirChar}</td>
+      <td class="action ${escapeAttr(e.action)}">${escapeHTML(e.action || '')}</td>
+      <td class="display">${displayHTML(e)}</td>
+    `;
+    tr.addEventListener('click', () => openDrawer(e));
+    return tr;
+  }
+
+  function displayHTML(e) {
+    let s = '';
+    if (e._tool) {
+      const after = e._display.slice(e._tool.length);
+      s = `<span class="tool">${escapeHTML(e._tool)}</span>${escapeHTML(after)}`;
+    } else {
+      s = escapeHTML(e._display || '');
+    }
+    if (e.reason) s += `<span class="reason">// ${escapeHTML(e.reason)}</span>`;
+    if (e.rule)   s += `<span class="rule">${escapeHTML(e.rule)}</span>`;
+    return s;
+  }
+
+  function escapeHTML(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function escapeAttr(s) { return escapeHTML(s); }
+
+  // ---- drawer ----
+  function openDrawer(e) {
+    for (const x of events) x._selected = (x === e);
+    document.getElementById('d-title').textContent = e._display || e.method || '(no display)';
+    document.getElementById('d-sub').textContent = `${e.server || '?'} · ${e.direction || ''} · ${e.kind || ''}`;
+    document.getElementById('d-ts').textContent = e.ts || '';
+    document.getElementById('d-server').textContent = e.server || '—';
+    document.getElementById('d-dir').textContent = e.direction || '—';
+    document.getElementById('d-action').textContent = e.action || '—';
+    document.getElementById('d-method').textContent = e.method || '—';
+    document.getElementById('d-id').textContent = e.id !== undefined ? JSON.stringify(e.id) : '—';
+
+    const toolRow = document.getElementById('d-tool-row');
+    if (e._tool) {
+      toolRow.hidden = false;
+      document.getElementById('d-tool').textContent = e._tool;
+    } else {
+      toolRow.hidden = true;
+    }
+    const reasonRow = document.getElementById('d-reason-row');
+    if (e.reason) {
+      reasonRow.hidden = false;
+      document.getElementById('d-reason').textContent = e.reason;
+    } else {
+      reasonRow.hidden = true;
+    }
+    const ruleRow = document.getElementById('d-rule-row');
+    if (e.rule) {
+      ruleRow.hidden = false;
+      document.getElementById('d-rule').textContent = e.rule;
+    } else {
+      ruleRow.hidden = true;
+    }
+
+    const $payload = document.getElementById('d-payload');
+    $payload.innerHTML = formatJSON(e.payload);
+
+    $drawer.hidden = false;
+    $main.classList.add('with-drawer');
+    render();
+  }
+  function closeDrawer() {
+    for (const x of events) x._selected = false;
+    $drawer.hidden = true;
+    $main.classList.remove('with-drawer');
+    render();
+  }
+  $drawerClose.addEventListener('click', closeDrawer);
+  document.addEventListener('keydown', ev => {
+    if (ev.key === 'Escape' && !$drawer.hidden) closeDrawer();
+  });
+
+  function formatJSON(v) {
+    if (v === undefined) return '<span class="j-null">undefined</span>';
+    const json = JSON.stringify(v, null, 2);
+    if (!json) return '';
+    return escapeHTML(json)
+      .replace(/("(?:[^"\\]|\\.)*")(\s*:)/g, '<span class="j-key">$1</span>$2')
+      .replace(/: ("(?:[^"\\]|\\.)*")/g, ': <span class="j-str">$1</span>')
+      .replace(/: (-?\d+(?:\.\d+)?(?:e[+-]?\d+)?)/gi, ': <span class="j-num">$1</span>')
+      .replace(/: (true|false)/g, ': <span class="j-bool">$1</span>')
+      .replace(/: (null)/g, ': <span class="j-null">$1</span>');
+  }
+
+  // ---- ingest ----
+  function ingest(e) {
+    enrich(e);
+    if (e.server) {
+      // Dynamically populate the server dropdown.
+      if (![...$serverSelect.options].some(o => o.value === e.server)) {
+        const opt = document.createElement('option');
+        opt.value = e.server; opt.textContent = e.server;
+        $serverSelect.appendChild(opt);
+      }
+    }
+    events.push(e);
+    if (events.length > MAX) events.shift();
+  }
+
+  // ---- filter wiring ----
+  let renderQueued = false;
+  function scheduleRender() {
+    if (renderQueued) return;
+    renderQueued = true;
+    requestAnimationFrame(() => { renderQueued = false; render(); });
+  }
+  $searchInput.addEventListener('input', () => {
+    F.search = $searchInput.value.trim().toLowerCase();
+    scheduleRender();
+  });
+  $serverSelect.addEventListener('change', () => {
+    F.server = $serverSelect.value;
+    scheduleRender();
+  });
+  $actionSelect.addEventListener('change', () => {
+    F.action = $actionSelect.value;
+    scheduleRender();
+  });
+  $denyOnlyBtn.addEventListener('click', () => {
+    F.denyOnly = !F.denyOnly;
+    $denyOnlyBtn.classList.toggle('active', F.denyOnly);
+    scheduleRender();
+  });
+  $hideNoiseBtn.addEventListener('click', () => {
+    F.hideNoise = !F.hideNoise;
+    $hideNoiseBtn.classList.toggle('active', F.hideNoise);
+    scheduleRender();
+  });
+
+  // ---- bootstrap: load recent + connect SSE ----
+  async function loadRecent() {
+    try {
+      const r = await fetch('/api/events/recent?n=500');
+      if (!r.ok) throw new Error(r.statusText);
+      const arr = await r.json();
+      for (const e of arr) ingest(e);
+      render();
+    } catch (err) {
+      console.error('load recent:', err);
+    }
+  }
+
+  function connectStream() {
+    const es = new EventSource('/api/events/stream');
+    es.onopen = () => {
+      $liveDot.classList.remove('disconnected');
+      $liveDot.title = 'connected';
+    };
+    es.onerror = () => {
+      $liveDot.classList.add('disconnected');
+      $liveDot.title = 'disconnected (will reconnect)';
+    };
+    es.onmessage = (msg) => {
+      try {
+        const e = JSON.parse(msg.data);
+        ingest(e);
+        scheduleRender();
+      } catch (err) {
+        console.warn('bad event:', msg.data, err);
+      }
+    };
+  }
+
+  loadRecent().then(connectStream);
+})();
+</script>
+
+</body>
+</html>

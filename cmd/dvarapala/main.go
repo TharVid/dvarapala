@@ -64,6 +64,8 @@ func run(ctx context.Context, args []string) error {
 		return cmdDaemon(ctx, rest)
 	case "logs":
 		return cmdLogs(ctx, rest)
+	case "ui":
+		return cmdUI(ctx, rest)
 	case "version", "-v", "--version":
 		fmt.Println(version.String())
 		return nil
@@ -93,6 +95,7 @@ COMMANDS
   doctor     Diagnose installation and configuration
   daemon     Manage background HTTP-proxy daemons (list / stop NAME / stop-all)
   logs       Pretty-print or follow the audit log
+  ui         Serve a local web view of the audit log (live, read-only)
   version    Print version info
 
 EXAMPLES
