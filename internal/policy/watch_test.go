@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -153,8 +154,12 @@ func TestWatcherSurvivesBadReload(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var errLog bytes.Buffer
-	w := &Watcher{Engine: eng, Path: path, Loader: loader, Interval: 30 * time.Millisecond, ErrOut: &errLog}
+	// Use a thread-safe writer for ErrOut — the watcher goroutine
+	// writes to it concurrently with the assertion that reads it,
+	// which `go test -race` correctly flags. The mutex guards both
+	// sides of that hand-off.
+	errLog := &syncBuffer{}
+	w := &Watcher{Engine: eng, Path: path, Loader: loader, Interval: 30 * time.Millisecond, ErrOut: errLog}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	done := make(chan error, 1)
@@ -167,7 +172,20 @@ func TestWatcherSurvivesBadReload(t *testing.T) {
 	if err := os.WriteFile(path, []byte("bad content longer"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(150 * time.Millisecond)
+
+	// Wait until the watcher has logged the skipped reload, or 1s.
+	deadline := time.Now().Add(1 * time.Second)
+	for time.Now().Before(deadline) {
+		if bytes.Contains(errLog.Bytes(), []byte("policy reload skipped")) {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	// Stop the watcher BEFORE reading state, so the read is not racing
+	// with concurrent writes from the watcher goroutine.
+	cancel()
+	<-done
 
 	d := eng.Evaluate(context.Background(), mcp.Message{Method: "tools/call"}, mcp.DirInbound, nil)
 	if d.Reason != "good" {
@@ -176,7 +194,31 @@ func TestWatcherSurvivesBadReload(t *testing.T) {
 	if !bytes.Contains(errLog.Bytes(), []byte("policy reload skipped")) {
 		t.Errorf("expected error log to mention 'policy reload skipped'; got: %s", errLog.String())
 	}
+}
 
-	cancel()
-	<-done
+// syncBuffer is a tiny mutex-guarded io.Writer for tests that need to
+// read what a goroutine has written without racing.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.Write(p)
+}
+
+func (s *syncBuffer) Bytes() []byte {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]byte, s.buf.Len())
+	copy(out, s.buf.Bytes())
+	return out
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.String()
 }
