@@ -86,6 +86,8 @@ Example:
 	}
 	defer log.Close()
 
+	startPolicyWatcher(ctx, eng, expandHome(policyPath))
+
 	code, err := proxy.RunStdio(ctx, proxy.StdioOptions{
 		Command:   cmd,
 		Server:    serverName,

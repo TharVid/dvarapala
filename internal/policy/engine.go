@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync/atomic"
 
 	"github.com/tharvid/dvarapala/internal/detectors"
 	"github.com/tharvid/dvarapala/internal/mcp"
@@ -24,16 +25,31 @@ type Decision struct {
 // AllowDecision is the implicit verdict when no rule matches.
 var AllowDecision = Decision{Action: ActionAllow}
 
-// Engine evaluates compiled rules against MCP messages.
-type Engine struct {
+// engineState is the immutable rule snapshot the Engine evaluates
+// against. Replacing it via atomic.Pointer is what makes hot-reload
+// safe under concurrent Evaluate calls.
+type engineState struct {
 	rules         []CompiledRule
 	defaultAction Action
-	registry      *detectors.Registry // optional; nil disables content_matches
+	registry      *detectors.Registry
+}
+
+// Engine evaluates compiled rules against MCP messages. All mutable
+// state lives behind state (atomic.Pointer) so Reload can swap rules
+// and registry without locks on the read path.
+type Engine struct {
+	state atomic.Pointer[engineState]
 }
 
 // SetRegistry attaches a detector registry. Without it, content_matches /
-// content_score rules silently no-op (no detector available).
-func (e *Engine) SetRegistry(r *detectors.Registry) { e.registry = r }
+// content_score rules silently no-op (no detector available). Safe to
+// call concurrently with Evaluate.
+func (e *Engine) SetRegistry(r *detectors.Registry) {
+	cur := e.state.Load()
+	next := *cur
+	next.registry = r
+	e.state.Store(&next)
+}
 
 // NewEngine compiles rules and returns a ready-to-evaluate engine. Rules
 // are evaluated in order; first match wins. defaultAction is returned when
@@ -42,6 +58,40 @@ func NewEngine(rules []Rule, defaultAction Action) (*Engine, error) {
 	if defaultAction == "" {
 		defaultAction = ActionAllow
 	}
+	compiled, err := compileRules(rules)
+	if err != nil {
+		return nil, err
+	}
+	e := &Engine{}
+	e.state.Store(&engineState{
+		rules:         compiled,
+		defaultAction: defaultAction,
+	})
+	return e, nil
+}
+
+// Reload recompiles rules and atomically swaps them in. The detector
+// registry is preserved across reloads (it's set separately via
+// SetRegistry). Returns the compile error without mutating state if
+// any rule is malformed — so a bad reload never breaks a running
+// gateway.
+func (e *Engine) Reload(rules []Rule) error {
+	compiled, err := compileRules(rules)
+	if err != nil {
+		return err
+	}
+	cur := e.state.Load()
+	e.state.Store(&engineState{
+		rules:         compiled,
+		defaultAction: cur.defaultAction,
+		registry:      cur.registry,
+	})
+	return nil
+}
+
+// compileRules turns a Rule slice into the CompiledRule slice that
+// evaluation reads. Pulled out of NewEngine so Reload can reuse it.
+func compileRules(rules []Rule) ([]CompiledRule, error) {
 	compiled := make([]CompiledRule, 0, len(rules))
 	for _, r := range rules {
 		cr := CompiledRule{Rule: r}
@@ -73,21 +123,22 @@ func NewEngine(rules []Rule, defaultAction Action) (*Engine, error) {
 		}
 		compiled = append(compiled, cr)
 	}
-	return &Engine{rules: compiled, defaultAction: defaultAction}, nil
+	return compiled, nil
 }
 
 // Rules returns the compiled rules (for inspection / testing).
-func (e *Engine) Rules() []CompiledRule { return e.rules }
+func (e *Engine) Rules() []CompiledRule { return e.state.Load().rules }
 
 // Evaluate runs the rules against m in direction dir and returns the first
 // matching rule's decision, or the default decision if none match. raw is
 // the original NDJSON bytes — used for content_matches detectors.
 func (e *Engine) Evaluate(ctx context.Context, m mcp.Message, dir mcp.Direction, raw []byte) Decision {
+	st := e.state.Load()
 	tool := extractToolName(m)
 	args := extractArgs(m)
 	scanContent := scanContentFor(m, dir, raw)
 
-	for _, cr := range e.rules {
+	for _, cr := range st.rules {
 		if !matchDirection(cr.Rule.Match.Direction, dir) {
 			continue
 		}
@@ -107,10 +158,10 @@ func (e *Engine) Evaluate(ctx context.Context, m mcp.Message, dir mcp.Direction,
 		// content_matches: run the named detector against scanContent.
 		var findings []detectors.Finding
 		if cm := cr.Rule.Match.ContentMatches; cm != nil && cm.Detector != "" {
-			if e.registry == nil {
+			if st.registry == nil {
 				continue
 			}
-			d, ok := e.registry.Get(cm.Detector)
+			d, ok := st.registry.Get(cm.Detector)
 			if !ok {
 				continue
 			}
@@ -125,10 +176,10 @@ func (e *Engine) Evaluate(ctx context.Context, m mcp.Message, dir mcp.Direction,
 		// but uses the detector's reported score. Phase 3 honours the binary
 		// "any hit" semantics; richer thresholding lands when llm-guard arrives.
 		if cs := cr.Rule.Match.ContentScore; cs != nil && cs.Detector != "" {
-			if e.registry == nil {
+			if st.registry == nil {
 				continue
 			}
-			d, ok := e.registry.Get(cs.Detector)
+			d, ok := st.registry.Get(cs.Detector)
 			if !ok {
 				continue
 			}
@@ -157,7 +208,7 @@ func (e *Engine) Evaluate(ctx context.Context, m mcp.Message, dir mcp.Direction,
 			Findings:    findings,
 		}
 	}
-	return Decision{Action: e.defaultAction}
+	return Decision{Action: st.defaultAction}
 }
 
 // scanContentFor returns the substring of the message that detectors

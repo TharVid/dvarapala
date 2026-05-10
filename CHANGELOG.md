@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.10] — 2026-05-10
+
+### Added
+
+- **Policy hot-reload.** `dvarapala wrap`, `dvarapala proxy`, and
+  `dvarapala hub` now watch their `--policy` file and atomically swap
+  in fresh rules within ~2 seconds of any save. Previously you had to
+  restart the gateway (which meant restarting Claude Code, which meant
+  losing context) to pick up a single rule edit.
+
+  Watcher implementation: poll-based mtime+size comparison every 2s
+  (no fsnotify dependency, works the same on macOS / Linux / Windows).
+  A bad reload — YAML parse error, regex compile error, etc. — is
+  printed to stderr but the previously-active rules keep evaluating
+  traffic, so a half-saved policy.yaml never breaks the gateway.
+
+  ```
+  $ vim ~/.dvarapala/policy.yaml   # add a deny rule
+  # In another terminal where dvarapala is running you'll see:
+  dvarapala: policy reloaded — 13 rules now active (~/.dvarapala/policy.yaml)
+  ```
+
+### Changed
+
+- `policy.Engine` now stores its compiled rules behind an
+  `atomic.Pointer`, so `Reload(rules)` is safe to call concurrently
+  with in-flight `Evaluate` calls. No lock-on-read on the hot path.
+
 ## [0.1.9] — 2026-05-10
 
 ### Added

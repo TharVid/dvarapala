@@ -99,6 +99,8 @@ Then in your MCP client config, point each server at:
 	}
 	defer log.Close()
 
+	startPolicyWatcher(ctx, eng, expandHome(effectivePolicy))
+
 	fmt.Fprintf(os.Stderr, "dvarapala hub listening on %s with %d server(s)\n",
 		cfg.Listen, len(cfg.Servers))
 	for name, sc := range cfg.Servers {

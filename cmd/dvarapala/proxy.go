@@ -83,6 +83,8 @@ Examples:
 	}
 	defer log.Close()
 
+	startPolicyWatcher(ctx, eng, expandHome(policyPath))
+
 	fmt.Fprintf(os.Stderr, "dvarapala proxy listening on %s → upstream %s\n", listen, upstream)
 	return proxy.RunHTTP(ctx, proxy.HTTPOptions{
 		Upstream:  upstream,
