@@ -107,7 +107,10 @@ servers:
 
 	srv := httptest.NewServer(h)
 	defer srv.Close()
-	resp, _ := http.Get(srv.URL + "/")
+	resp, err := http.Get(srv.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 	var got struct {
@@ -131,7 +134,10 @@ servers:
 	defer h.Close()
 	srv := httptest.NewServer(h)
 	defer srv.Close()
-	resp, _ := http.Post(srv.URL+"/nope", "application/json", strings.NewReader(`{}`))
+	resp, err := http.Post(srv.URL+"/nope", "application/json", strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", resp.StatusCode)
@@ -144,18 +150,24 @@ func TestHubDeniesInbound(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	cfg, _ := LoadFromReader(strings.NewReader(`
+	cfg, err := LoadFromReader(strings.NewReader(`
 servers:
   api:
     upstream: ` + upstream.URL + `
 `))
+	if err != nil {
+		t.Fatal(err)
+	}
 	rules := []policy.Rule{{
 		Name:   "deny-tools-list",
 		Match:  policy.Match{Method: "tools/list"},
 		Action: policy.ActionDeny,
 		Reason: "denied",
 	}}
-	eng, _ := policy.NewEngine(rules, policy.ActionAllow)
+	eng, err := policy.NewEngine(rules, policy.ActionAllow)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	h, err := New(context.Background(), cfg, Options{Audit: nullLogger(), Engine: eng})
 	if err != nil {
@@ -165,8 +177,11 @@ servers:
 	srv := httptest.NewServer(h)
 	defer srv.Close()
 
-	resp, _ := http.Post(srv.URL+"/api", "application/json",
+	resp, err := http.Post(srv.URL+"/api", "application/json",
 		strings.NewReader(`{"jsonrpc":"2.0","id":42,"method":"tools/list"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 	if !bytes.Contains(body, []byte("Dvarapala")) {

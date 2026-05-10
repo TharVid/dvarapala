@@ -251,11 +251,11 @@ func (h *httpRelay) relaySSE(w http.ResponseWriter, resp *http.Response) {
 		if len(line) > 0 {
 			if d, ok := bytes.CutPrefix(bytes.TrimRight(line, "\r\n"), []byte("data: ")); ok {
 				out := h.evaluateOutboundBytes(d)
-				w.Write([]byte("data: "))
-				w.Write(out)
-				w.Write([]byte("\n"))
+				_, _ = w.Write([]byte("data: "))
+				_, _ = w.Write(out)
+				_, _ = w.Write([]byte("\n"))
 			} else {
-				w.Write(line)
+				_, _ = w.Write(line)
 			}
 			if flusher != nil {
 				flusher.Flush()
