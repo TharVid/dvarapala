@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 // cmdInstall edits an MCP-client config file (Claude Code's ~/.claude.json,
@@ -200,18 +201,21 @@ func wrapAllMCPs(cfgPath, binary, policyPath string) error {
 		if rawURL, hasURL := entry["url"].(string); hasURL && rawURL != "" {
 			isLocal := strings.Contains(rawURL, "127.0.0.1:") || strings.Contains(rawURL, "localhost:")
 			if isLocal {
-				// URL already points local. Check for a matching daemon
-				// record — if its process is alive, the entry is genuinely
-				// already proxied. If the record exists but the process is
-				// dead, re-spawn from the record (recovers from a previous
-				// `daemon stop` or reboot). If neither, the local URL is
-				// stale and there's nothing for us to do automatically.
+				// URL already points local. Three sub-cases:
+				//
+				//   1. matching daemon record + process alive → genuinely
+				//      already proxied; skip.
+				//   2. matching daemon record + process dead → re-spawn at
+				//      the same port using the saved upstream.
+				//   3. no daemon record (stale local URL) → look at the
+				//      pristine .bak file for the original upstream and
+				//      spawn a fresh proxy. This recovers from earlier
+				//      versions that lost daemon records on stop-all.
 				if rec, exists := findDaemonRecord(name); exists {
 					if processAlive(rec.PID) {
 						skippedAlready++
 						continue
 					}
-					// Re-spawn at the same listen port using the saved upstream.
 					newRec, perr := spawnProxy(binary, name, rec.Upstream, rec.Listen, policyPath, auditPath)
 					if perr != nil {
 						return fmt.Errorf("re-spawn proxy for %q: %w", name, perr)
@@ -219,7 +223,31 @@ func wrapAllMCPs(cfgPath, binary, policyPath string) error {
 					proxiedHTTP = append(proxiedHTTP, fmt.Sprintf("%s → %s (pid %d, re-spawned)", name, rec.Listen, newRec.PID))
 					continue
 				}
-				skippedAlready++
+				originalURL, ok := findOriginalURLFromBackup(cfgPath, name)
+				if !ok {
+					fmt.Fprintf(os.Stderr,
+						"  WARNING: %q points at %q but no daemon record or backup upstream found.\n"+
+							"           Edit %s manually to restore the original URL, or run\n"+
+							"           `claude mcp remove %s -s user` then re-add it.\n",
+						name, rawURL, cfgPath, name)
+					skippedAlready++
+					continue
+				}
+				port, perr := pickFreePort(portStartHint(), used)
+				if perr != nil {
+					return fmt.Errorf("server %q: %w", name, perr)
+				}
+				listen := fmt.Sprintf("127.0.0.1:%d", port)
+				rec, perr := spawnProxy(binary, name, originalURL, listen, policyPath, auditPath)
+				if perr != nil {
+					return fmt.Errorf("spawn proxy for %q: %w", name, perr)
+				}
+				newEntry := map[string]any{"url": "http://" + listen}
+				if t, ok := entry["type"]; ok {
+					newEntry["type"] = t
+				}
+				rawServers[name] = newEntry
+				proxiedHTTP = append(proxiedHTTP, fmt.Sprintf("%s → %s (pid %d, recovered from backup)", name, listen, rec.PID))
 				continue
 			}
 			port, perr := pickFreePort(portStartHint(), used)
@@ -291,8 +319,16 @@ func wrapAllMCPs(cfgPath, binary, policyPath string) error {
 	return nil
 }
 
-// readConfigForEdit reads path (creating an empty config if absent),
-// writes a .bak alongside, and returns the parsed JSON map.
+// readConfigForEdit reads path, writes a pristine .bak alongside on the
+// first run only (so re-running this command never overwrites the
+// pre-Dvarapala state), and returns the parsed JSON map.
+//
+// Older versions overwrote .bak on every run. That meant after two
+// invocations the .bak held a *Dvarapala-mutated* config (with local
+// 127.0.0.1 URLs from the previous run) instead of the user's actual
+// original — and rolling back was impossible. The fix: only write .bak
+// when it doesn't exist yet. A timestamped per-run snapshot is also
+// written so an audit trail is available.
 func readConfigForEdit(path string) (map[string]any, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, err
@@ -302,9 +338,16 @@ func readConfigForEdit(path string) (map[string]any, error) {
 		return nil, err
 	}
 	if len(data) > 0 {
-		if backupErr := os.WriteFile(path+".bak", data, 0o600); backupErr != nil {
-			return nil, fmt.Errorf("backup: %w", backupErr)
+		// Pristine .bak — first-write-wins.
+		if _, statErr := os.Stat(path + ".bak"); os.IsNotExist(statErr) {
+			if backupErr := os.WriteFile(path+".bak", data, 0o600); backupErr != nil {
+				return nil, fmt.Errorf("backup: %w", backupErr)
+			}
 		}
+		// Always write a timestamped snapshot so users can compare runs
+		// and we don't lose history.
+		ts := time.Now().UTC().Format("20060102-150405")
+		_ = os.WriteFile(fmt.Sprintf("%s.bak.%s", path, ts), data, 0o600)
 	}
 	cfg := map[string]any{}
 	if len(data) > 0 {
@@ -313,6 +356,31 @@ func readConfigForEdit(path string) (map[string]any, error) {
 		}
 	}
 	return cfg, nil
+}
+
+// findOriginalURLFromBackup looks in <cfgPath>.bak for the entry named
+// `name` and returns its URL if it is a non-local upstream. Used when
+// --wrap-all encounters a stale local URL with no daemon record so we
+// can recover the original upstream automatically.
+func findOriginalURLFromBackup(cfgPath, name string) (string, bool) {
+	data, err := os.ReadFile(cfgPath + ".bak")
+	if err != nil {
+		return "", false
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return "", false
+	}
+	servers, _ := cfg["mcpServers"].(map[string]any)
+	entry, _ := servers[name].(map[string]any)
+	url, _ := entry["url"].(string)
+	if url == "" {
+		return "", false
+	}
+	if strings.Contains(url, "127.0.0.1") || strings.Contains(url, "localhost") {
+		return "", false // backup itself is also stale, nothing useful
+	}
+	return url, true
 }
 
 func writeConfig(path string, cfg map[string]any) error {
