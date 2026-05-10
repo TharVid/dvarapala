@@ -13,11 +13,12 @@ import (
 
 // Decision is the engine's verdict for one MCP message.
 type Decision struct {
-	Action   Action
-	Rule     string // rule name; empty if no rule fired
-	Pack     string // rulepack the rule came from
-	Reason   string
-	Findings []detectors.Finding // populated when a content_matches rule fires
+	Action      Action
+	Rule        string // rule name; empty if no rule fired
+	Pack        string // rulepack the rule came from
+	Reason      string
+	Replacement string              // template for redact action; empty → default
+	Findings    []detectors.Finding // populated when a content_matches rule fires
 }
 
 // AllowDecision is the implicit verdict when no rule matches.
@@ -148,11 +149,12 @@ func (e *Engine) Evaluate(ctx context.Context, m mcp.Message, dir mcp.Direction,
 		}
 
 		return Decision{
-			Action:   cr.Rule.Action,
-			Rule:     cr.Rule.Name,
-			Pack:     cr.Rule.Pack,
-			Reason:   cr.Rule.Reason,
-			Findings: findings,
+			Action:      cr.Rule.Action,
+			Rule:        cr.Rule.Name,
+			Pack:        cr.Rule.Pack,
+			Reason:      cr.Rule.Reason,
+			Replacement: cr.Rule.Replacement,
+			Findings:    findings,
 		}
 	}
 	return Decision{Action: e.defaultAction}

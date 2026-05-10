@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.9] — 2026-05-10
+
+### Added
+
+- **`dvarapala doctor` now reports background-daemon health.** Counts
+  alive vs stale daemons recorded under `~/.dvarapala/daemons/` and
+  fails the check if any daemons are stale (process gone, record
+  still on disk), with an inline pointer to `dvarapala daemon clean`
+  or `dvarapala install --wrap-all` for recovery.
+
+- **Per-rule redaction template.** Rules can now set a `replacement:`
+  field whose value is the string substituted in place of detector
+  matches when that rule fires the redact action. Two placeholders
+  are recognised:
+
+  ```yaml
+  - name: redact-emails-in-tool-output
+    match: { content_matches: { detector: presidio } }
+    action: redact
+    replacement: "<{{kind}}>"      # → <pii>
+
+  - name: redact-secrets-strict
+    match: { content_matches: { detector: gitleaks } }
+    action: redact
+    replacement: "***"             # fixed-string redaction
+  ```
+
+  `{{rule}}` expands to the detector's rule id (e.g. `aws-access-token`);
+  `{{kind}}` expands to a coarse category (`secret`, `pii`,
+  `prompt-injection`, `tool-mutation`, `tool-poisoning`, `match`).
+  An empty `replacement` falls back to the legacy
+  `[REDACTED:{{rule}}]` shape, so existing policies are untouched.
+  Template is plumbed through stdio, HTTP proxy, and hub redactors.
+
 ## [0.1.8] — 2026-05-10
 
 ### Added

@@ -95,6 +95,31 @@ func cmdDoctor(_ context.Context, _ []string) error {
 		return auditDir, nil
 	}))
 
+	checks = append(checks, runSoftCheck("background proxy daemons", func() (string, bool, error) {
+		records, err := loadDaemonRecords()
+		if err != nil {
+			return "", true, err
+		}
+		if len(records) == 0 {
+			return "no daemons recorded (none spawned by --wrap-all)", false, nil
+		}
+		alive, dead := 0, 0
+		var deadNames []string
+		for _, r := range records {
+			if processAlive(r.PID) {
+				alive++
+				continue
+			}
+			dead++
+			deadNames = append(deadNames, r.Name)
+		}
+		if dead == 0 {
+			return fmt.Sprintf("%d running, 0 stale", alive), true, nil
+		}
+		return "", true, fmt.Errorf("%d running, %d STALE (%s) — run `dvarapala daemon clean` to forget them, or `dvarapala install --wrap-all` to re-spawn",
+			alive, dead, strings.Join(deadNames, ", "))
+	}))
+
 	checks = append(checks, runSoftCheck("Presidio sidecar (DVARAPALA_PRESIDIO_URL)", func() (string, bool, error) {
 		u := os.Getenv("DVARAPALA_PRESIDIO_URL")
 		if u == "" {

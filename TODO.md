@@ -26,10 +26,10 @@ Status as of `main`. Each feature ends with a tagged release.
 
 UI work is gated on a clean baseline. Fix these first:
 
-- [ ] **`dvarapala doctor`** auto-detect stale daemon records (process dead but file present) and offer cleanup
+- [x] **`dvarapala doctor`** auto-detect stale daemon records (shipped v0.1.9 — fails the check, points at `daemon clean` / `--wrap-all`)
 - [x] **Audit log rotation** — shipped in v0.1.8 (50 MiB × 5 keep, configurable via `--audit-max-mb` / `--audit-keep`; follow-mode survives rotation via inode-change detection)
 - [ ] **Policy hot-reload** — currently a wrap restart is needed when policy.yaml changes
-- [ ] **Configurable redaction string** — currently hardcoded `[REDACTED:rule-id]`; allow per-rule replacement (`***`, `<email>`, etc.)
+- [x] **Configurable redaction string** — shipped v0.1.9 (per-rule `replacement:` field with `{{rule}}` / `{{kind}}` placeholders; empty falls back to legacy `[REDACTED:rule-id]`)
 - [ ] **Egress allowlist enforcement** — listed in default rule pack as a scaffold but not actually enforced
 - [ ] **Edge case** — HTTP daemons retagged via `--wrap-all` when listen port differs from record
 

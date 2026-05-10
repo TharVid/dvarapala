@@ -328,7 +328,7 @@ func (h *httpRelay) evaluateOutboundBytes(body []byte) []byte {
 
 	switch decision.Action {
 	case policy.ActionRedact:
-		out, err := applyRedaction(context.Background(), body, h.opts.Detectors)
+		out, err := applyRedaction(context.Background(), body, h.opts.Detectors, decision.Replacement)
 		if err == nil {
 			return out
 		}

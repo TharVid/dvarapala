@@ -174,7 +174,7 @@ func relay(
 			continue
 
 		case policy.ActionRedact:
-			redacted, err := applyRedaction(ctx, raw, registry)
+			redacted, err := applyRedaction(ctx, raw, registry, decision.Replacement)
 			if err == nil {
 				forward = redacted
 				auditPayload = redacted
@@ -222,9 +222,9 @@ func logEvent(log *audit.Logger, server string, dir mcp.Direction, msg mcp.Messa
 // structure stays intact even when a detector's match would have crossed
 // a quote or brace if applied to the raw line.
 //
-// Findings inside a single string are sorted Start-desc so the redactions
-// don't shift later positions.
-func applyRedaction(ctx context.Context, raw []byte, registry *detectors.Registry) ([]byte, error) {
+// template is the rule's Replacement string (with {{rule}} / {{kind}}
+// placeholders). Empty falls back to "[REDACTED:{{rule}}]".
+func applyRedaction(ctx context.Context, raw []byte, registry *detectors.Registry, template string) ([]byte, error) {
 	if registry == nil {
 		return raw, nil
 	}
@@ -232,7 +232,7 @@ func applyRedaction(ctx context.Context, raw []byte, registry *detectors.Registr
 	if err := json.Unmarshal(raw, &v); err != nil {
 		return raw, err
 	}
-	walked := redactWalk(ctx, v, registry)
+	walked := redactWalk(ctx, v, registry, template)
 	out, err := json.Marshal(walked)
 	if err != nil {
 		return raw, err
@@ -240,18 +240,18 @@ func applyRedaction(ctx context.Context, raw []byte, registry *detectors.Registr
 	return out, nil
 }
 
-func redactWalk(ctx context.Context, v any, reg *detectors.Registry) any {
+func redactWalk(ctx context.Context, v any, reg *detectors.Registry, tpl string) any {
 	switch t := v.(type) {
 	case string:
-		return redactString(ctx, t, reg)
+		return redactString(ctx, t, reg, tpl)
 	case map[string]any:
 		for k, vv := range t {
-			t[k] = redactWalk(ctx, vv, reg)
+			t[k] = redactWalk(ctx, vv, reg, tpl)
 		}
 		return t
 	case []any:
 		for i, vv := range t {
-			t[i] = redactWalk(ctx, vv, reg)
+			t[i] = redactWalk(ctx, vv, reg, tpl)
 		}
 		return t
 	}
@@ -259,14 +259,14 @@ func redactWalk(ctx context.Context, v any, reg *detectors.Registry) any {
 }
 
 // redactString runs every detector in reg against s and returns s with
-// every finding's Match substring replaced by "[REDACTED:rule-id]".
+// every finding's Match substring replaced via formatRedactionMarker.
 //
-// We use literal-string replacement (strings.ReplaceAll on h.Match) rather
-// than byte-offset splicing because some detectors report column-within-
-// line positions instead of absolute byte offsets — gitleaks does, for
-// instance — and applying those columns as if they were offsets in
-// multi-line content would clobber the wrong span.
-func redactString(ctx context.Context, s string, reg *detectors.Registry) string {
+// Literal-string replacement (strings.ReplaceAll on h.Match) is used
+// rather than byte-offset splicing because some detectors report
+// column-within-line positions instead of absolute byte offsets —
+// gitleaks does, for instance — and applying those columns as if they
+// were offsets in multi-line content would clobber the wrong span.
+func redactString(ctx context.Context, s string, reg *detectors.Registry, tpl string) string {
 	var allHits []detectors.Finding
 	for _, name := range reg.Names() {
 		d, ok := reg.Get(name)
@@ -295,10 +295,43 @@ func redactString(ctx context.Context, s string, reg *detectors.Registry) string
 		if h.Match == "" {
 			continue
 		}
-		marker := fmt.Sprintf("[REDACTED:%s]", safeRuleID(h.RuleID))
-		out = strings.ReplaceAll(out, h.Match, marker)
+		out = strings.ReplaceAll(out, h.Match, formatRedactionMarker(tpl, h))
 	}
 	return out
+}
+
+// formatRedactionMarker renders the per-rule replacement template,
+// substituting {{rule}} and {{kind}} placeholders. Empty template falls
+// back to the legacy "[REDACTED:rule-id]" form for backward compat.
+func formatRedactionMarker(tpl string, h detectors.Finding) string {
+	if tpl == "" {
+		return fmt.Sprintf("[REDACTED:%s]", safeRuleID(h.RuleID))
+	}
+	out := strings.ReplaceAll(tpl, "{{rule}}", safeRuleID(h.RuleID))
+	out = strings.ReplaceAll(out, "{{kind}}", findingKind(h))
+	return out
+}
+
+// findingKind classifies a Finding's RuleID into a coarse category
+// (secret / pii / prompt-injection / tool-mutation / tool-poisoning /
+// generic) so {{kind}} can render usefully without the caller knowing
+// the specific detector.
+func findingKind(h detectors.Finding) string {
+	id := strings.ToLower(h.RuleID)
+	switch {
+	case strings.Contains(id, "key"), strings.Contains(id, "token"), strings.Contains(id, "secret"), strings.Contains(id, "credential"):
+		return "secret"
+	case strings.Contains(id, "email"), strings.Contains(id, "phone"), strings.Contains(id, "ssn"), strings.Contains(id, "credit"), strings.Contains(id, "pii"):
+		return "pii"
+	case strings.Contains(id, "injection"), strings.Contains(id, "prompt"):
+		return "prompt-injection"
+	case strings.Contains(id, "mutation"), strings.Contains(id, "rugpull"):
+		return "tool-mutation"
+	case strings.Contains(id, "poisoning"):
+		return "tool-poisoning"
+	default:
+		return "match"
+	}
 }
 
 func safeRuleID(s string) string {

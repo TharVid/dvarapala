@@ -69,6 +69,13 @@ type Rule struct {
 	// Action-specific config (parsed but not all enforced in Phase 2).
 	RateLimit *RateLimitSpec `yaml:"rate_limit,omitempty" json:"rate_limit,omitempty"`
 	Rewrite   map[string]any `yaml:"rewrite,omitempty" json:"rewrite,omitempty"`
+	// Replacement is the template used by the redact action when this rule
+	// matches. Two placeholders are recognised:
+	//   {{rule}} → the matching detector's rule id
+	//   {{kind}} → a coarse kind ("secret", "pii", "prompt-injection", …)
+	// Empty falls back to "[REDACTED:{{rule}}]" so existing policies
+	// behave exactly as before.
+	Replacement string `yaml:"replacement,omitempty" json:"replacement,omitempty"`
 }
 
 // Match is the condition predicate. Each non-zero field is an additional

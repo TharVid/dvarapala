@@ -154,7 +154,7 @@ func (h *Hub) evaluateOutbound(server string, body []byte) []byte {
 		Payload:   body,
 	})
 	if decision.Action == policy.ActionRedact && h.opts.Detectors != nil {
-		out, err := redactJSON(context.Background(), body, h.opts.Detectors)
+		out, err := redactJSON(context.Background(), body, h.opts.Detectors, decision.Replacement)
 		if err == nil {
 			return out
 		}
