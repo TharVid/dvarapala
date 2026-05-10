@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] — 2026-05-10
+
+### Added
+
+- **`dvarapala install --wrap-all`** — reads the client's existing
+  config, wraps every stdio MCP server in one shot, leaves
+  already-wrapped entries alone (idempotent), skips HTTP/URL upstreams
+  with a note pointing at `dvarapala proxy`. Preserves per-server
+  `env` (e.g. `GITHUB_TOKEN`).
+
+  After `brew install dvarapala`, the natural one-liner is:
+
+  ```
+  dvarapala install --client claude-code --wrap-all
+  ```
+
+  Same flag works for `claude-desktop`, `cursor`, `cline`.
+
+### Docs
+
+- Full overhaul of README, getting-started, architecture, policy
+  language, built-in rules, plus new docs/cli-reference.md and
+  per-client deployment guides (Claude Code, Claude Desktop, Cursor,
+  Cline). Zero broken cross-links.
+
 ## [0.1.1] — 2026-05-10
 
 ### Added
