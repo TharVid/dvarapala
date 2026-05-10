@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -32,9 +33,9 @@ func TestEngineDeniesRmRf(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := eng.Evaluate(
+	got := eng.Evaluate(context.Background(),
 		msg("tools/call", `{"name":"shell","arguments":{"command":"rm -rf /"}}`),
-		mcp.DirInbound,
+		mcp.DirInbound, nil,
 	)
 	if got.Action != ActionDeny {
 		t.Errorf("got %s, want deny", got.Action)
@@ -51,9 +52,9 @@ func TestEngineAllowsBenignTool(t *testing.T) {
 		Action: ActionDeny,
 	}}
 	eng, _ := NewEngine(rules, ActionAllow)
-	got := eng.Evaluate(
+	got := eng.Evaluate(context.Background(),
 		msg("tools/call", `{"name":"shell","arguments":{"command":"ls /tmp"}}`),
-		mcp.DirInbound,
+		mcp.DirInbound, nil,
 	)
 	if got.Action != ActionAllow {
 		t.Errorf("got %s, want allow", got.Action)
@@ -67,10 +68,10 @@ func TestEngineDirectionFilter(t *testing.T) {
 		Action: ActionDeny,
 	}}
 	eng, _ := NewEngine(rules, ActionAllow)
-	if got := eng.Evaluate(msg("tools/list", ""), mcp.DirInbound); got.Action != ActionAllow {
+	if got := eng.Evaluate(context.Background(), msg("tools/list", ""), mcp.DirInbound, nil); got.Action != ActionAllow {
 		t.Errorf("inbound: got %s want allow", got.Action)
 	}
-	if got := eng.Evaluate(msg("tools/list", ""), mcp.DirOutbound); got.Action != ActionDeny {
+	if got := eng.Evaluate(context.Background(), msg("tools/list", ""), mcp.DirOutbound, nil); got.Action != ActionDeny {
 		t.Errorf("outbound: got %s want deny", got.Action)
 	}
 }
@@ -82,10 +83,10 @@ func TestEngineMethodMatch(t *testing.T) {
 		Action: ActionDeny,
 	}}
 	eng, _ := NewEngine(rules, ActionAllow)
-	if got := eng.Evaluate(msg("tools/list", ""), mcp.DirInbound); got.Action != ActionDeny {
+	if got := eng.Evaluate(context.Background(), msg("tools/list", ""), mcp.DirInbound, nil); got.Action != ActionDeny {
 		t.Errorf("got %s want deny", got.Action)
 	}
-	if got := eng.Evaluate(msg("ping", ""), mcp.DirInbound); got.Action != ActionAllow {
+	if got := eng.Evaluate(context.Background(), msg("ping", ""), mcp.DirInbound, nil); got.Action != ActionAllow {
 		t.Errorf("ping: got %s want allow", got.Action)
 	}
 }
@@ -96,7 +97,7 @@ func TestEngineFirstMatchWins(t *testing.T) {
 		{Name: "deny-second", Match: Match{Method: "tools/list"}, Action: ActionDeny},
 	}
 	eng, _ := NewEngine(rules, ActionAllow)
-	got := eng.Evaluate(msg("tools/list", ""), mcp.DirInbound)
+	got := eng.Evaluate(context.Background(), msg("tools/list", ""), mcp.DirInbound, nil)
 	if got.Action != ActionLogOnly || got.Rule != "log-only-first" {
 		t.Errorf("got %+v want log-only-first", got)
 	}

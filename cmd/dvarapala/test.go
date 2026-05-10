@@ -27,7 +27,7 @@ type AttackCase struct {
 	} `json:"expected"`
 }
 
-func cmdTest(_ context.Context, args []string) error {
+func cmdTest(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("test", flag.ContinueOnError)
 	var (
 		policyPath string
@@ -63,6 +63,11 @@ Flags:
 	if err != nil {
 		return err
 	}
+	registry, err := buildDetectorRegistry()
+	if err != nil {
+		return fmt.Errorf("detectors: %w", err)
+	}
+	eng.SetRegistry(registry)
 
 	caseBytes, err := os.ReadFile(casePath)
 	if err != nil {
@@ -84,7 +89,7 @@ Flags:
 		if len(m.Result) > 0 || m.Error != nil {
 			dir = mcp.DirOutbound
 		}
-		d := eng.Evaluate(m, dir)
+		d := eng.Evaluate(ctx, m, dir, raw)
 		if d.Action != policy.ActionAllow {
 			got = d
 			break

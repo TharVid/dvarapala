@@ -1,14 +1,14 @@
 {
   "id": "secrets-exfil-001",
   "category": "secrets-exfil",
-  "description": "Tool output (e.g., file read) contains an AWS access key — should be redacted.",
+  "description": "Tool output (e.g., file read) contains an AWS access key — should be redacted. The key uses realistic format (gitleaks's stop-word filter rejects EXAMPLE-tagged literals to avoid false positives).",
   "source": "gitleaks rule aws-access-token",
   "messages": [
     {
       "jsonrpc": "2.0",
       "id": 7,
       "result": {
-        "content": [{ "type": "text", "text": "found credentials: AKIAIOSFODNN7EXAMPLE / wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY" }]
+        "content": [{ "type": "text", "text": "found credentials: aws_access_key_id=AKIAQYLPMN5HABCDEFGH aws_secret_access_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYabc123def456ghi7" }]
       }
     }
   ],

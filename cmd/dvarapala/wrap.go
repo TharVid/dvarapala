@@ -10,6 +10,8 @@ import (
 
 	"github.com/tharvid/dvarapala/internal/audit"
 	"github.com/tharvid/dvarapala/internal/config"
+	"github.com/tharvid/dvarapala/internal/detectors"
+	"github.com/tharvid/dvarapala/internal/detectors/secrets"
 	"github.com/tharvid/dvarapala/internal/policy"
 	"github.com/tharvid/dvarapala/internal/proxy"
 )
@@ -59,6 +61,11 @@ Example:
 	if err != nil {
 		return fmt.Errorf("compile policy: %w", err)
 	}
+	registry, err := buildDetectorRegistry()
+	if err != nil {
+		return fmt.Errorf("detectors: %w", err)
+	}
+	eng.SetRegistry(registry)
 
 	log, err := audit.Open(expandHome(auditPath))
 	if err != nil {
@@ -67,9 +74,10 @@ Example:
 	defer log.Close()
 
 	code, err := proxy.RunStdio(ctx, proxy.StdioOptions{
-		Command: cmd,
-		Audit:   log,
-		Engine:  eng,
+		Command:   cmd,
+		Audit:     log,
+		Engine:    eng,
+		Detectors: registry,
 	})
 	if err != nil {
 		return err
@@ -78,6 +86,20 @@ Example:
 		os.Exit(code)
 	}
 	return nil
+}
+
+// buildDetectorRegistry assembles the in-process detectors. Sidecar-backed
+// detectors (Presidio for PII, llm-guard for prompt injection) plug in via
+// HTTP clients in a follow-up commit; their absence here is silent (rules
+// referencing them no-op until wired).
+func buildDetectorRegistry() (*detectors.Registry, error) {
+	r := detectors.NewRegistry()
+	gl, err := secrets.New()
+	if err != nil {
+		return nil, fmt.Errorf("gitleaks: %w", err)
+	}
+	r.Register(gl)
+	return r, nil
 }
 
 func defaultAuditPath() string {

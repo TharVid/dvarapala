@@ -1,20 +1,23 @@
 package policy
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
 
+	"github.com/tharvid/dvarapala/internal/detectors"
 	"github.com/tharvid/dvarapala/internal/mcp"
 )
 
 // Decision is the engine's verdict for one MCP message.
 type Decision struct {
-	Action Action
-	Rule   string // rule name; empty if no rule fired
-	Pack   string // rulepack the rule came from
-	Reason string
+	Action   Action
+	Rule     string // rule name; empty if no rule fired
+	Pack     string // rulepack the rule came from
+	Reason   string
+	Findings []detectors.Finding // populated when a content_matches rule fires
 }
 
 // AllowDecision is the implicit verdict when no rule matches.
@@ -24,7 +27,12 @@ var AllowDecision = Decision{Action: ActionAllow}
 type Engine struct {
 	rules         []CompiledRule
 	defaultAction Action
+	registry      *detectors.Registry // optional; nil disables content_matches
 }
+
+// SetRegistry attaches a detector registry. Without it, content_matches /
+// content_score rules silently no-op (no detector available).
+func (e *Engine) SetRegistry(r *detectors.Registry) { e.registry = r }
 
 // NewEngine compiles rules and returns a ready-to-evaluate engine. Rules
 // are evaluated in order; first match wins. defaultAction is returned when
@@ -71,10 +79,13 @@ func NewEngine(rules []Rule, defaultAction Action) (*Engine, error) {
 func (e *Engine) Rules() []CompiledRule { return e.rules }
 
 // Evaluate runs the rules against m in direction dir and returns the first
-// matching rule's decision, or the default decision if none match.
-func (e *Engine) Evaluate(m mcp.Message, dir mcp.Direction) Decision {
+// matching rule's decision, or the default decision if none match. raw is
+// the original NDJSON bytes — used for content_matches detectors.
+func (e *Engine) Evaluate(ctx context.Context, m mcp.Message, dir mcp.Direction, raw []byte) Decision {
 	tool := extractToolName(m)
 	args := extractArgs(m)
+	scanContent := scanContentFor(m, dir, raw)
+
 	for _, cr := range e.rules {
 		if !matchDirection(cr.Rule.Match.Direction, dir) {
 			continue
@@ -91,15 +102,75 @@ func (e *Engine) Evaluate(m mcp.Message, dir mcp.Direction) Decision {
 		if !matchArgs(cr.ArgRegexes, args) {
 			continue
 		}
-		// (tool_description_matches is for tools/list inspection — phase 4.)
+
+		// content_matches: run the named detector against scanContent.
+		var findings []detectors.Finding
+		if cm := cr.Rule.Match.ContentMatches; cm != nil && cm.Detector != "" {
+			if e.registry == nil {
+				continue
+			}
+			d, ok := e.registry.Get(cm.Detector)
+			if !ok {
+				continue
+			}
+			hits, err := d.Detect(ctx, scanContent)
+			if err != nil || len(hits) == 0 {
+				continue
+			}
+			findings = hits
+		}
+
+		// content_score: detector-with-threshold; same shape as content_matches
+		// but uses the detector's reported score. Phase 3 honours the binary
+		// "any hit" semantics; richer thresholding lands when llm-guard arrives.
+		if cs := cr.Rule.Match.ContentScore; cs != nil && cs.Detector != "" {
+			if e.registry == nil {
+				continue
+			}
+			d, ok := e.registry.Get(cs.Detector)
+			if !ok {
+				continue
+			}
+			hits, err := d.Detect(ctx, scanContent)
+			if err != nil {
+				continue
+			}
+			matched := false
+			for _, h := range hits {
+				if h.Score >= cs.Threshold {
+					findings = append(findings, h)
+					matched = true
+				}
+			}
+			if !matched {
+				continue
+			}
+		}
+
 		return Decision{
-			Action: cr.Rule.Action,
-			Rule:   cr.Rule.Name,
-			Pack:   cr.Rule.Pack,
-			Reason: cr.Rule.Reason,
+			Action:   cr.Rule.Action,
+			Rule:     cr.Rule.Name,
+			Pack:     cr.Rule.Pack,
+			Reason:   cr.Rule.Reason,
+			Findings: findings,
 		}
 	}
 	return Decision{Action: e.defaultAction}
+}
+
+// scanContentFor returns the substring of the message that detectors
+// should inspect: tool arguments for inbound calls, the full result blob
+// for outbound responses. Phase 3 keeps this as raw JSON bytes — the
+// regex detectors don't care about JSON structure and Findings carry
+// byte-offset spans into raw, which is what redaction needs.
+func scanContentFor(m mcp.Message, dir mcp.Direction, raw []byte) string {
+	if len(raw) > 0 {
+		return string(raw)
+	}
+	if dir == mcp.DirInbound && len(m.Params) > 0 {
+		return string(m.Params)
+	}
+	return string(m.Result)
 }
 
 // extractToolName returns the tool name for tools/call requests, or "".
