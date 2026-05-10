@@ -6,8 +6,8 @@ import (
 	"fmt"
 )
 
-// Stubs for commands not yet implemented. Implementations live in their
-// own files (wrap.go, init.go, lint.go, test.go, logs.go).
+// Stubs for commands not yet implemented. wrap, init, lint, test, install,
+// scan, doctor, logs all live in their own files.
 
 func cmdProxy(_ context.Context, _ []string) error {
 	return fmt.Errorf("proxy: %w", errNotImplemented)
@@ -17,16 +17,4 @@ func cmdHub(_ context.Context, _ []string) error {
 	return fmt.Errorf("hub: %w", errNotImplemented)
 }
 
-func cmdInstall(_ context.Context, _ []string) error {
-	return fmt.Errorf("install: %w", errNotImplemented)
-}
-
-func cmdScan(_ context.Context, _ []string) error {
-	return fmt.Errorf("scan: %w", errNotImplemented)
-}
-
-func cmdDoctor(_ context.Context, _ []string) error {
-	return fmt.Errorf("doctor: %w", errNotImplemented)
-}
-
-var errNotImplemented = errors.New("not yet implemented (scaffold)")
+var errNotImplemented = errors.New("not yet implemented (Phase 6: HTTP/SSE proxy + multi-MCP hub modes)")

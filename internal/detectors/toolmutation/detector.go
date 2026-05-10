@@ -24,6 +24,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"sync"
 
@@ -35,13 +37,80 @@ const Name = "tool-mutation"
 
 // Detector tracks tool fingerprints across calls.
 type Detector struct {
-	mu   sync.RWMutex
-	seen map[string]string // toolName → SHA-256 hex
+	mu       sync.RWMutex
+	seen     map[string]string // toolName → SHA-256 hex
+	storeDir string            // empty = in-memory only
 }
 
-// New returns an empty in-memory Detector. (Persistence is a separate
-// concern; the engine wires it in if a path is configured.)
+// fingerprintRecord is one line of the persistence JSONL.
+type fingerprintRecord struct {
+	Name string `json:"name"`
+	Hash string `json:"hash"`
+}
+
+// New returns an in-memory Detector. Use NewPersistent to survive restarts.
 func New() *Detector { return &Detector{seen: make(map[string]string)} }
+
+// NewPersistent returns a Detector that loads any prior fingerprints from
+// dir/tool-fingerprints.jsonl on startup and appends every new fingerprint
+// to that file. Cross-session rug-pull detection only works with this.
+//
+// Errors during load are non-fatal: a missing or unreadable file is
+// treated as "fresh state" so the detector still works in-memory.
+func NewPersistent(dir string) *Detector {
+	d := &Detector{
+		seen:     make(map[string]string),
+		storeDir: dir,
+	}
+	d.loadFromDisk()
+	return d
+}
+
+// fingerprintsPath is the on-disk JSONL location.
+func (d *Detector) fingerprintsPath() string {
+	if d.storeDir == "" {
+		return ""
+	}
+	return filepath.Join(d.storeDir, "tool-fingerprints.jsonl")
+}
+
+func (d *Detector) loadFromDisk() {
+	p := d.fingerprintsPath()
+	if p == "" {
+		return
+	}
+	f, err := os.Open(p)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	dec := json.NewDecoder(f)
+	for dec.More() {
+		var r fingerprintRecord
+		if err := dec.Decode(&r); err != nil {
+			return
+		}
+		d.seen[r.Name] = r.Hash // last write wins
+	}
+}
+
+// persist appends a fingerprint to the JSONL store. Non-fatal on error.
+func (d *Detector) persist(name, hash string) {
+	p := d.fingerprintsPath()
+	if p == "" {
+		return
+	}
+	if err := os.MkdirAll(d.storeDir, 0o755); err != nil {
+		return
+	}
+	f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	b, _ := json.Marshal(fingerprintRecord{Name: name, Hash: hash})
+	_, _ = f.Write(append(b, '\n'))
+}
 
 // Name implements detectors.Detector.
 func (d *Detector) Name() string { return Name }
@@ -83,6 +152,7 @@ func (d *Detector) Detect(_ context.Context, content string) ([]detectors.Findin
 		prev, exists := d.seen[t.Name]
 		d.seen[t.Name] = hash
 		d.mu.Unlock()
+		d.persist(t.Name, hash)
 		if exists && prev != hash {
 			hits = append(hits, detectors.Finding{
 				Detector:    Name,
