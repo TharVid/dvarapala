@@ -129,13 +129,6 @@ Dvarapala's novel research contribution. 5/5 attack-corpus cases now pass end-to
 - [ ] Anthropic / OpenAI plugins
 - [ ] Multi-tenant hub mode with OIDC
 
-## Thesis tie-in
-
-- [ ] Phase 1–4: implementation chapters
-- [ ] Phase 8: evaluation chapter (detection rate, FPR, latency)
-- [ ] Threat taxonomy: separate chapter (Phase 0 already drafted in `docs/architecture.md`)
-- [ ] BTU proposal: `docs/thesis/proposal.md` (Phase 1 deliverable)
-
 ## Don't forget
 
 - [ ] Logo (dvarapala figure / shield motif) — for README and brew formula

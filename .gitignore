@@ -48,3 +48,7 @@ audit.jsonl
 local-policy.yaml
 local-config.yaml
 fake-aws-credentials.txt
+
+# Personal / local-only notes (thesis, etc.)
+thesis-notes*
+*.local.md
