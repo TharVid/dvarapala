@@ -105,6 +105,29 @@ type httpRelay struct {
 	userAgent string
 }
 
+// upstreamForPOST returns the URL to forward a POST to. If the client
+// path is the same as the upstream's configured path (or empty/"/"), use
+// the full upstream URL. Otherwise, use the upstream's host + the
+// client's path — that's where SSE-advertised endpoints live.
+func (h *httpRelay) upstreamForPOST(clientPath string) string {
+	upPath := h.upstream.Path
+	if upPath == "" {
+		upPath = "/"
+	}
+	cp := clientPath
+	if cp == "" {
+		cp = "/"
+	}
+	// Empty / root client path → full configured upstream URL (covers the
+	// streamable-HTTP "single endpoint" shape).
+	if cp == "/" {
+		return h.upstream.String()
+	}
+	// Client posted to a specific path (e.g. /messages?sessionId=ABC) —
+	// that's an SSE-advertised endpoint. Use upstream host + that path.
+	return h.upstream.Scheme + "://" + h.upstream.Host + cp
+}
+
 func (h *httpRelay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
@@ -151,9 +174,14 @@ func (h *httpRelay) servePost(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Forward to upstream. Copy the original headers (minus Host so the
-	// upstream sees its own).
-	upstreamURL := h.upstream.String() + r.URL.Path
+	// Forward to upstream. POSTs go to the upstream's HOST + the client's
+	// path — NOT the upstream's configured path. The configured path
+	// (e.g. /sse) is the SSE channel; POSTed messages target whatever
+	// endpoint the SSE stream advertised (typically /messages or similar
+	// with a sessionId query). If the client POSTs to /, fall back to the
+	// upstream's full configured URL (handles non-SSE / streamable-HTTP
+	// servers that use a single endpoint).
+	upstreamURL := h.upstreamForPOST(r.URL.Path)
 	if r.URL.RawQuery != "" {
 		upstreamURL += "?" + r.URL.RawQuery
 	}
@@ -185,8 +213,12 @@ func (h *httpRelay) servePost(w http.ResponseWriter, r *http.Request) {
 
 // serveGet relays a long-lived SSE GET (server→client only). Each event is
 // audited; deny on outbound here just drops the event.
+//
+// GETs are the SSE channel opener. Forward to the upstream's full
+// configured URL (the SSE endpoint), regardless of which client path
+// triggered the GET — there's only one SSE endpoint per proxy.
 func (h *httpRelay) serveGet(w http.ResponseWriter, r *http.Request) {
-	upstreamURL := h.upstream.String() + r.URL.Path
+	upstreamURL := h.upstream.String()
 	if r.URL.RawQuery != "" {
 		upstreamURL += "?" + r.URL.RawQuery
 	}
