@@ -102,7 +102,7 @@ Examples:
 	if len(cmdParts) == 0 {
 		return errors.New("empty --command")
 	}
-	wrappedArgs := append([]string{"wrap", "--policy", expandedPolicy, "--"}, cmdParts...)
+	wrappedArgs := append([]string{"wrap", "--policy", expandedPolicy, "--server", serverName, "--"}, cmdParts...)
 	return rewriteMCPConfig(cfgPath, serverName, dvarBinary, wrappedArgs)
 }
 
@@ -212,15 +212,27 @@ func wrapAllMCPs(cfgPath, binary, policyPath string) error {
 				//      spawn a fresh proxy. This recovers from earlier
 				//      versions that lost daemon records on stop-all.
 				if rec, exists := findDaemonRecord(name); exists {
-					if processAlive(rec.PID) {
+					alive := processAlive(rec.PID)
+					stale := rec.SchemaVersion < daemonSchemaVersion
+					if alive && !stale {
 						skippedAlready++
 						continue
+					}
+					if alive && stale {
+						// Daemon was spawned by an older version that doesn't
+						// tag MCP server names onto audit events. Kill and
+						// re-spawn so logs become MCP-attributable.
+						_, _ = stopDaemon(rec)
 					}
 					newRec, perr := spawnProxy(binary, name, rec.Upstream, rec.Listen, policyPath, auditPath)
 					if perr != nil {
 						return fmt.Errorf("re-spawn proxy for %q: %w", name, perr)
 					}
-					proxiedHTTP = append(proxiedHTTP, fmt.Sprintf("%s → %s (pid %d, re-spawned)", name, rec.Listen, newRec.PID))
+					reason := "re-spawned"
+					if stale {
+						reason = "re-spawned for server-name tagging"
+					}
+					proxiedHTTP = append(proxiedHTTP, fmt.Sprintf("%s → %s (pid %d, %s)", name, rec.Listen, newRec.PID, reason))
 					continue
 				}
 				originalURL, ok := findOriginalURLFromBackup(cfgPath, name)
@@ -275,11 +287,27 @@ func wrapAllMCPs(cfgPath, binary, policyPath string) error {
 			continue
 		}
 		if cmd == binary || cmd == binaryAbs || filepath.Base(cmd) == "dvarapala" {
-			skippedAlready++
+			// Already wrapped. If the wrap entry predates --server (v0.1.6 and
+			// earlier), retag it in-place so audit events get the MCP name.
+			existingArgs := stringSlice(entry["args"])
+			retagged, changed := ensureServerFlag(existingArgs, name)
+			if !changed {
+				skippedAlready++
+				continue
+			}
+			newEntry := map[string]any{
+				"command": binary,
+				"args":    retagged,
+			}
+			if env, ok := entry["env"]; ok {
+				newEntry["env"] = env
+			}
+			rawServers[name] = newEntry
+			wrappedStdio = append(wrappedStdio, name+" (retagged)")
 			continue
 		}
 		origArgs := stringSlice(entry["args"])
-		wrappedArgs := append([]string{"wrap", "--policy", policyPath, "--", cmd}, origArgs...)
+		wrappedArgs := append([]string{"wrap", "--policy", policyPath, "--server", name, "--", cmd}, origArgs...)
 		newEntry := map[string]any{
 			"command": binary,
 			"args":    wrappedArgs,
@@ -413,4 +441,28 @@ func stringSlice(v any) []string {
 		}
 	}
 	return out
+}
+
+// ensureServerFlag inserts "--server NAME" before the "--" separator in a
+// `dvarapala wrap` arg slice, if not already present. Returns the (possibly
+// updated) slice and a flag indicating whether a change was made. Args are
+// expected to look like: ["wrap", "--policy", P, "--", cmd, args…].
+func ensureServerFlag(args []string, name string) ([]string, bool) {
+	dashIdx := -1
+	for i, a := range args {
+		if a == "--server" {
+			return args, false
+		}
+		if a == "--" && dashIdx == -1 {
+			dashIdx = i
+		}
+	}
+	if dashIdx == -1 || name == "" {
+		return args, false
+	}
+	out := make([]string, 0, len(args)+2)
+	out = append(out, args[:dashIdx]...)
+	out = append(out, "--server", name)
+	out = append(out, args[dashIdx:]...)
+	return out, true
 }

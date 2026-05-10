@@ -30,6 +30,7 @@ const (
 // Event is one entry in the audit log.
 type Event struct {
 	Time      time.Time       `json:"ts"`
+	Server    string          `json:"server,omitempty"`
 	Direction mcp.Direction   `json:"direction"`
 	Kind      mcp.Kind        `json:"kind"`
 	Method    string          `json:"method,omitempty"`

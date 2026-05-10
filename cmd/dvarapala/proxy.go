@@ -20,11 +20,13 @@ func cmdProxy(ctx context.Context, args []string) error {
 		listen     string
 		policyPath string
 		auditPath  string
+		serverName string
 	)
 	fs.StringVar(&upstream, "upstream", "", "upstream MCP HTTP URL (required)")
 	fs.StringVar(&listen, "listen", "127.0.0.1:8080", "local address to listen on")
 	fs.StringVar(&policyPath, "policy", "", "policy YAML (empty = transparent passthrough)")
 	fs.StringVar(&auditPath, "audit", defaultAuditPath(), "audit log path")
+	fs.StringVar(&serverName, "server", "", "logical name for this MCP, tagged into every audit event")
 	fs.Usage = func() {
 		fmt.Fprint(fs.Output(), `Usage: dvarapala proxy --upstream URL [flags]
 
@@ -78,6 +80,7 @@ Examples:
 	return proxy.RunHTTP(ctx, proxy.HTTPOptions{
 		Upstream:  upstream,
 		Listen:    listen,
+		Server:    serverName,
 		Audit:     log,
 		Engine:    eng,
 		Detectors: registry,

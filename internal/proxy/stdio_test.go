@@ -52,7 +52,7 @@ func TestRelayForwardsAndAudits(t *testing.T) {
 	log := audit.New(testWriteCloser{&auditBuf})
 	var mu sync.Mutex
 
-	if err := relay(context.Background(), in, &out, mcp.DirInbound, log, nil, nil, &out, &mu); err != nil {
+	if err := relay(context.Background(), in, &out, mcp.DirInbound, "test-mcp", log, nil, nil, &out, &mu); err != nil {
 		t.Fatalf("relay: %v", err)
 	}
 
@@ -85,7 +85,7 @@ func TestRelayDeniesAndSynthesisesError(t *testing.T) {
 	log := audit.New(testWriteCloser{&auditBuf})
 	var mu sync.Mutex
 
-	if err := relay(context.Background(), in, &upstream, mcp.DirInbound, log, eng, nil, &clientOut, &mu); err != nil {
+	if err := relay(context.Background(), in, &upstream, mcp.DirInbound, "test-mcp", log, eng, nil, &clientOut, &mu); err != nil {
 		t.Fatalf("relay: %v", err)
 	}
 
@@ -126,7 +126,7 @@ func TestRelayDropsDeniedNotification(t *testing.T) {
 	log := audit.New(testWriteCloser{&auditBuf})
 	var mu sync.Mutex
 
-	if err := relay(context.Background(), in, &upstream, mcp.DirInbound, log, eng, nil, &clientOut, &mu); err != nil {
+	if err := relay(context.Background(), in, &upstream, mcp.DirInbound, "test-mcp", log, eng, nil, &clientOut, &mu); err != nil {
 		t.Fatalf("relay: %v", err)
 	}
 	if upstream.Len() != 0 {

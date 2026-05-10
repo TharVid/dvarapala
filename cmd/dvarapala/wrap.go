@@ -25,9 +25,11 @@ func cmdWrap(ctx context.Context, args []string) error {
 	var (
 		policyPath string
 		auditPath  string
+		serverName string
 	)
 	fs.StringVar(&policyPath, "policy", "", "path to policy YAML (empty = transparent passthrough)")
 	fs.StringVar(&auditPath, "audit", defaultAuditPath(), "path to audit log (JSONL)")
+	fs.StringVar(&serverName, "server", "", "logical name for this MCP, tagged into every audit event")
 	fs.Usage = func() {
 		fmt.Fprint(fs.Output(), `Usage: dvarapala wrap [flags] -- <command> [args...]
 
@@ -79,6 +81,7 @@ Example:
 
 	code, err := proxy.RunStdio(ctx, proxy.StdioOptions{
 		Command:   cmd,
+		Server:    serverName,
 		Audit:     log,
 		Engine:    eng,
 		Detectors: registry,

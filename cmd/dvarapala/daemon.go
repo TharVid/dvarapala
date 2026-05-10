@@ -26,7 +26,16 @@ type daemonRecord struct {
 	Upstream string `json:"upstream"`
 	LogFile  string `json:"log_file"`
 	Started  string `json:"started"`
+	// SchemaVersion lets `--wrap-all` detect daemons spawned by older
+	// versions that don't tag the MCP server name onto audit events, and
+	// restart them. Empty (zero) means pre-v0.1.7.
+	SchemaVersion int `json:"schema_version,omitempty"`
 }
+
+// daemonSchemaVersion is the current daemon-record version. Bump when the
+// daemon's runtime behaviour changes in a way that requires re-spawning
+// older instances. v1 = adds --server tagging on audit events.
+const daemonSchemaVersion = 1
 
 func daemonsDir() string {
 	return filepath.Join(defaultStoreDir(), "daemons")
@@ -116,6 +125,7 @@ func spawnProxy(binary, name, upstream, listen, policyPath, auditPath string) (d
 		"--listen", listen,
 		"--policy", policyPath,
 		"--audit", auditPath,
+		"--server", name,
 	}
 	cmd := exec.Command(binary, args...)
 	cmd.Stdout = logFile
@@ -134,12 +144,13 @@ func spawnProxy(binary, name, upstream, listen, policyPath, auditPath string) (d
 	_ = logFile.Close()
 
 	rec := daemonRecord{
-		Name:     name,
-		PID:      pid,
-		Listen:   listen,
-		Upstream: upstream,
-		LogFile:  logPath,
-		Started:  time.Now().UTC().Format(time.RFC3339),
+		Name:          name,
+		PID:           pid,
+		Listen:        listen,
+		Upstream:      upstream,
+		LogFile:       logPath,
+		Started:       time.Now().UTC().Format(time.RFC3339),
+		SchemaVersion: daemonSchemaVersion,
 	}
 	if err := saveDaemonRecord(rec); err != nil {
 		return rec, fmt.Errorf("save record: %w", err)

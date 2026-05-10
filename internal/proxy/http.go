@@ -39,6 +39,9 @@ type HTTPOptions struct {
 	Upstream string
 	// Listen is the local bind address, e.g. "127.0.0.1:8080".
 	Listen string
+	// Server is a logical name tagged onto every audit event so the
+	// shared audit log can be filtered/grouped per MCP. Empty is fine.
+	Server string
 	// Audit, Engine, Detectors are the same shape as in StdioOptions.
 	Audit     *audit.Logger
 	Engine    *policy.Engine
@@ -110,10 +113,6 @@ type httpRelay struct {
 // the full upstream URL. Otherwise, use the upstream's host + the
 // client's path — that's where SSE-advertised endpoints live.
 func (h *httpRelay) upstreamForPOST(clientPath string) string {
-	upPath := h.upstream.Path
-	if upPath == "" {
-		upPath = "/"
-	}
 	cp := clientPath
 	if cp == "" {
 		cp = "/"
@@ -159,6 +158,7 @@ func (h *httpRelay) servePost(w http.ResponseWriter, r *http.Request) {
 	if jerr := decodeJSON(body, &msg); jerr == nil && h.opts.Engine != nil {
 		decision := h.opts.Engine.Evaluate(r.Context(), msg, mcp.DirInbound, body)
 		_ = h.opts.Audit.Write(audit.Event{
+			Server:    h.opts.Server,
 			Direction: mcp.DirInbound,
 			Kind:      msg.Kind(),
 			Method:    msg.Method,
@@ -315,6 +315,7 @@ func (h *httpRelay) evaluateOutboundBytes(body []byte) []byte {
 		decision = h.opts.Engine.Evaluate(context.Background(), msg, mcp.DirOutbound, body)
 	}
 	_ = h.opts.Audit.Write(audit.Event{
+		Server:    h.opts.Server,
 		Direction: mcp.DirOutbound,
 		Kind:      msg.Kind(),
 		Method:    msg.Method,

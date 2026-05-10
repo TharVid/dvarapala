@@ -97,6 +97,7 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err := json.Unmarshal(body, &inMsg); err == nil && h.opts.Engine != nil {
 		decision := h.opts.Engine.Evaluate(r.Context(), inMsg, mcp.DirInbound, body)
 		_ = h.opts.Audit.Write(audit.Event{
+			Server:    name,
 			Direction: mcp.DirInbound,
 			Kind:      inMsg.Kind(),
 			Method:    inMsg.Method,
@@ -126,13 +127,13 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respBody = h.evaluateOutbound(respBody)
+	respBody = h.evaluateOutbound(name, respBody)
 
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write(respBody)
 }
 
-func (h *Hub) evaluateOutbound(body []byte) []byte {
+func (h *Hub) evaluateOutbound(server string, body []byte) []byte {
 	if len(body) == 0 || h.opts.Engine == nil {
 		return body
 	}
@@ -142,6 +143,7 @@ func (h *Hub) evaluateOutbound(body []byte) []byte {
 	}
 	decision := h.opts.Engine.Evaluate(context.Background(), msg, mcp.DirOutbound, body)
 	_ = h.opts.Audit.Write(audit.Event{
+		Server:    server,
 		Direction: mcp.DirOutbound,
 		Kind:      msg.Kind(),
 		Method:    msg.Method,

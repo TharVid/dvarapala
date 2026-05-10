@@ -35,6 +35,10 @@ type StdioOptions struct {
 	Stderr  io.Writer
 	Env     []string
 	Audit   *audit.Logger
+	// Server is a logical name tagged onto every audit event so a single
+	// shared audit log can be filtered/grouped by which MCP the message
+	// came from. Empty is fine (legacy behaviour).
+	Server string
 	// Engine is the policy evaluator. nil → transparent passthrough.
 	Engine *policy.Engine
 	// Detectors is consulted by the redact action: every named detector
@@ -102,14 +106,14 @@ func RunStdio(parentCtx context.Context, opts StdioOptions) (int, error) {
 	go func() {
 		defer wg.Done()
 		defer childIn.Close()
-		_ = relay(ctx, opts.Stdin, childIn, mcp.DirInbound, opts.Audit, opts.Engine,
+		_ = relay(ctx, opts.Stdin, childIn, mcp.DirInbound, opts.Server, opts.Audit, opts.Engine,
 			opts.Detectors, opts.Stdout, &clientMu)
 	}()
 
 	// Outbound: child stdout → client stdout.
 	go func() {
 		defer wg.Done()
-		_ = relay(ctx, childOut, opts.Stdout, mcp.DirOutbound, opts.Audit, opts.Engine,
+		_ = relay(ctx, childOut, opts.Stdout, mcp.DirOutbound, opts.Server, opts.Audit, opts.Engine,
 			opts.Detectors, opts.Stdout, &clientMu)
 	}()
 
@@ -137,6 +141,7 @@ func relay(
 	ctx context.Context,
 	src io.Reader, dst io.Writer,
 	dir mcp.Direction,
+	server string,
 	log *audit.Logger,
 	eng *policy.Engine,
 	registry *detectors.Registry,
@@ -162,10 +167,10 @@ func relay(
 				if err := writeDeny(clientWriter, clientMu, msg.ID, decision); err != nil {
 					return fmt.Errorf("deny synthesise: %w", err)
 				}
-				logEvent(log, dir, msg, decision, auditPayload)
+				logEvent(log, server, dir, msg, decision, auditPayload)
 				continue
 			}
-			logEvent(log, dir, msg, decision, auditPayload)
+			logEvent(log, server, dir, msg, decision, auditPayload)
 			continue
 
 		case policy.ActionRedact:
@@ -179,7 +184,7 @@ func relay(
 		default:
 		}
 
-		logEvent(log, dir, msg, decision, auditPayload)
+		logEvent(log, server, dir, msg, decision, auditPayload)
 
 		// Outbound writes share clientMu with deny synthesis.
 		if dir == mcp.DirOutbound {
@@ -198,8 +203,9 @@ func relay(
 	return sc.Err()
 }
 
-func logEvent(log *audit.Logger, dir mcp.Direction, msg mcp.Message, d policy.Decision, payload []byte) {
+func logEvent(log *audit.Logger, server string, dir mcp.Direction, msg mcp.Message, d policy.Decision, payload []byte) {
 	_ = log.Write(audit.Event{
+		Server:    server,
 		Direction: dir,
 		Kind:      msg.Kind(),
 		Method:    msg.Method,

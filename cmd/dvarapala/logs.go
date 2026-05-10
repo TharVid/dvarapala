@@ -241,6 +241,7 @@ type logFormatter struct {
 // auditEvent is the JSONL shape we read.
 type auditEvent struct {
 	TS        string          `json:"ts"`
+	Server    string          `json:"server,omitempty"`
 	Direction string          `json:"direction"`
 	Kind      string          `json:"kind"`
 	Method    string          `json:"method,omitempty"`
@@ -295,9 +296,13 @@ func (f *logFormatter) formatLine(w io.Writer, line []byte) {
 		return s + strings.Repeat(" ", n-len(s))
 	}
 
+	server := e.Server
+	if server == "" {
+		server = "?"
+	}
 	if !f.colour {
-		fmt.Fprintf(w, "%s  %s  %-6s  %s",
-			ts, arrow, e.Action, display)
+		fmt.Fprintf(w, "%s  %-12s  %s  %-6s  %s",
+			ts, truncForLog(server, 12), arrow, e.Action, display)
 		if e.Reason != "" {
 			fmt.Fprintf(w, "  // %s", e.Reason)
 		}
@@ -306,8 +311,9 @@ func (f *logFormatter) formatLine(w io.Writer, line []byte) {
 		}
 		fmt.Fprintln(w)
 	} else {
-		fmt.Fprintf(w, "%s%s%s  %s%s%s  %s%s%s  %s",
+		fmt.Fprintf(w, "%s%s%s  %s%-12s%s  %s%s%s  %s%s%s  %s",
 			dim, ts, reset,
+			purple, pad(truncForLog(server, 12), 12), reset,
 			f.colourArrow(e.Direction), arrow, reset,
 			f.colourAction(e.Action), pad(e.Action, 6), reset,
 			display,

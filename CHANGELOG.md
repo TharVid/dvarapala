@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.7] — 2026-05-10
+
+### Added
+
+- **MCP server name on every audit event.** `audit.Event` now carries a
+  `server` field; `dvarapala wrap` and `dvarapala proxy` both take a
+  `--server NAME` flag whose value is tagged onto every emitted event.
+  `dvarapala logs` renders it as a column so a single shared
+  `~/.dvarapala/audit.jsonl` is now per-MCP attributable:
+
+  ```
+  12:29:43  deepwiki      →  allow   read_wiki_structure(repoName="facebook/react")
+  12:29:44  deepwiki      ←  allow   read_wiki_structure → Available pages for facebook/react: …
+  12:30:01  everything    →  allow   echo(message="hi")
+  ```
+
+- **`dvarapala install --wrap-all` auto-injects `--server <name>`** for
+  every entry, using the MCP key from the client config as the name.
+  Existing wrapped entries from v0.1.6 and earlier are retagged
+  in-place (the `--` separator is detected and `--server NAME` is
+  inserted before it). Existing HTTP-proxy daemons spawned by older
+  versions are detected via a new `schema_version` field in their
+  daemon record, killed, and re-spawned so their event stream picks up
+  the tag too.
+
+### Fixed
+
+- **Dead-code lint failure on the v0.1.6 release commit.**
+  `internal/proxy/http.go` had an ineffectual `upPath = "/"` assignment
+  that was flagged by `ineffassign` but slipped past local builds.
+  Removed.
+
 ## [0.1.6] — 2026-05-10
 
 ### Changed
