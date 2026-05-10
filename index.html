@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dvarapala — security gateway for MCP</title>
+<meta name="description" content="Dvarapala is a drop-in security gateway for the Model Context Protocol. It denies, redacts, and audits every JSON-RPC message between LLM clients and third-party MCP servers.">
+<meta property="og:title" content="Dvarapala — security gateway for MCP">
+<meta property="og:description" content="Drop-in security gateway for the Model Context Protocol. Stops tool poisoning, secrets leaks, prompt injection, destructive actions.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://dvarapala.tharvid.in/">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23f4a738'/%3E%3Ctext x='32' y='44' text-anchor='middle' font-family='serif' font-size='40' font-weight='700' fill='%230a0e14'%3Eद%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #0a0e14;
+    --bg-2: #11161e;
+    --fg: #e8e6e1;
+    --dim: #7a8194;
+    --accent: #f4a738;
+    --teal: #5eb3a8;
+    --red: #e07b6e;
+    --green: #82c878;
+    --border: rgba(255,255,255,0.08);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, monospace; }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+  /* nav */
+  nav {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(10,14,20,0.85); backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+  .brand-mark {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 6px;
+    background: var(--accent); color: var(--bg);
+    font-family: serif; font-weight: 700; font-size: 18px;
+  }
+  .nav-links { display: flex; gap: 22px; font-size: 14px; }
+  .nav-links a { color: var(--fg); }
+  .nav-links a:hover { color: var(--accent); text-decoration: none; }
+  @media (max-width: 600px) { .nav-links { display: none; } }
+
+  /* hero */
+  .hero { padding: 96px 0 80px; text-align: center; position: relative; overflow: hidden; }
+  .hero::before {
+    content: ""; position: absolute; inset: 0;
+    background: radial-gradient(ellipse at top, rgba(244,167,56,0.10), transparent 60%);
+    pointer-events: none;
+  }
+  .sanskrit {
+    font-family: "Tiro Devanagari Hindi", "Noto Serif Devanagari", serif;
+    font-size: clamp(64px, 11vw, 128px);
+    font-weight: 400;
+    line-height: 1; margin: 0 0 16px;
+    background: linear-gradient(180deg, var(--accent), #c98521);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    letter-spacing: -2px;
+  }
+  .tagline { color: var(--dim); font-size: 18px; margin: 0 0 8px; font-style: italic; }
+  h1 { font-size: clamp(28px, 4vw, 44px); margin: 12px 0 20px; font-weight: 700; letter-spacing: -0.5px; }
+  .lede { color: var(--dim); font-size: 18px; max-width: 640px; margin: 0 auto 36px; }
+  .cta-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 48px; }
+  .btn {
+    display: inline-block; padding: 12px 22px; border-radius: 8px;
+    font-weight: 600; font-size: 15px; transition: transform 0.1s, background 0.15s;
+  }
+  .btn:hover { text-decoration: none; transform: translateY(-1px); }
+  .btn-primary { background: var(--accent); color: var(--bg); }
+  .btn-primary:hover { background: #ffba4d; }
+  .btn-ghost { background: transparent; color: var(--fg); border: 1px solid var(--border); }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* install block */
+  .install {
+    max-width: 640px; margin: 0 auto;
+    background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 18px 22px; text-align: left; font-size: 14px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  .install-tabs { display: flex; gap: 16px; margin-bottom: 12px; font-size: 12px; color: var(--dim); border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .install-tab { cursor: default; }
+  .install-tab.active { color: var(--accent); }
+  .install pre { margin: 0; color: var(--fg); white-space: pre-wrap; }
+  .install pre .prompt { color: var(--teal); user-select: none; }
+  .install pre .comment { color: var(--dim); }
+
+  /* sections */
+  section { padding: 80px 0; border-top: 1px solid var(--border); }
+  section h2 { font-size: 32px; margin: 0 0 8px; letter-spacing: -0.5px; }
+  section h2 + .sub { color: var(--dim); margin-top: 0; margin-bottom: 40px; max-width: 640px; }
+
+  /* features grid */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
+  .card {
+    background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 22px;
+  }
+  .card-icon {
+    display: inline-block; padding: 4px 9px; border-radius: 5px;
+    background: rgba(244,167,56,0.12); color: var(--accent);
+    font-size: 11px; font-weight: 600; letter-spacing: 0.5px;
+    margin-bottom: 10px; text-transform: uppercase;
+  }
+  .card h3 { margin: 0 0 6px; font-size: 17px; }
+  .card p { margin: 0; color: var(--dim); font-size: 14px; line-height: 1.6; }
+
+  /* terminal mock */
+  .term {
+    background: #0d1117; border: 1px solid var(--border); border-radius: 10px;
+    overflow: hidden; box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+  }
+  .term-bar {
+    display: flex; align-items: center; gap: 6px;
+    padding: 10px 14px; background: #161b22; border-bottom: 1px solid var(--border);
+  }
+  .term-bar .dot { width: 12px; height: 12px; border-radius: 50%; background: #444; }
+  .term-bar .dot:nth-child(1) { background: #ff5f57; }
+  .term-bar .dot:nth-child(2) { background: #febc2e; }
+  .term-bar .dot:nth-child(3) { background: #28c840; }
+  .term-bar .title { color: var(--dim); font-size: 12px; margin-left: 8px; font-family: ui-monospace, monospace; }
+  .term-body { padding: 18px 22px; font-family: ui-monospace, monospace; font-size: 13px; line-height: 1.7; overflow-x: auto; }
+  .term-body .prompt { color: var(--teal); }
+  .term-body .ts { color: var(--dim); }
+  .term-body .srv { color: #b389e0; }
+  .term-body .arrow-in { color: #5b9cf2; }
+  .term-body .arrow-out { color: var(--teal); }
+  .term-body .allow { color: var(--green); }
+  .term-body .deny { color: var(--red); font-weight: 600; }
+  .term-body .redact { color: var(--accent); font-weight: 600; }
+  .term-body .reason { color: var(--dim); }
+  .term-body .rule { color: var(--dim); }
+
+  /* architecture diagram */
+  .diagram {
+    background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 28px; font-family: ui-monospace, monospace; font-size: 13px;
+    color: var(--fg); white-space: pre; overflow-x: auto; line-height: 1.5;
+  }
+  .diagram .accent { color: var(--accent); font-weight: 600; }
+
+  /* footer */
+  footer { padding: 50px 0 80px; color: var(--dim); font-size: 13px; text-align: center; border-top: 1px solid var(--border); }
+  footer a { color: var(--dim); }
+  footer a:hover { color: var(--accent); }
+
+  .col-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start; }
+  @media (max-width: 760px) { .col-2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap nav-inner">
+    <div class="brand">
+      <span class="brand-mark">द</span>
+      <span>Dvarapala</span>
+    </div>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/TharVid/dvarapala">GitHub →</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="sanskrit">द्वारपाल</div>
+    <p class="tagline">dvārapāla — gatekeeper</p>
+    <h1>Security gateway for MCP servers</h1>
+    <p class="lede">
+      Dvarapala sits between your LLM client and any third-party MCP server. It parses every
+      JSON-RPC message, enforces a YAML policy, and <strong>denies, redacts, or logs</strong>
+      anything that violates the rules — with zero changes to the underlying MCP.
+    </p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#install">Get started</a>
+      <a class="btn btn-ghost" href="https://github.com/TharVid/dvarapala">View on GitHub</a>
+    </div>
+    <div class="install" id="install">
+      <div class="install-tabs">
+        <span class="install-tab active">macOS / Linux</span>
+        <span class="install-tab">Windows</span>
+        <span class="install-tab">Docker</span>
+      </div>
+<pre><span class="prompt">$</span> brew tap tharvid/dvarapala
+<span class="prompt">$</span> brew install dvarapala
+<span class="prompt">$</span> dvarapala install --client claude-code --wrap-all
+<span class="comment"># Done. Restart Claude Code; <code>dvarapala logs -f</code> to watch traffic.</span></pre>
+    </div>
+  </div>
+</header>
+
+<section id="features">
+  <div class="wrap">
+    <h2>What it stops</h2>
+    <p class="sub">Dvarapala doesn't reinvent detection — it composes battle-tested OSS (gitleaks, Microsoft Presidio, ProtectAI llm-guard) into an MCP-aware enforcement layer, plus two novel detectors only the gateway can do.</p>
+
+    <div class="grid">
+      <div class="card">
+        <span class="card-icon">novel</span>
+        <h3>Tool poisoning</h3>
+        <p>Malicious instructions hidden in tool descriptions are flagged before the LLM ever reads them. Regex on prompt-injection patterns, always on.</p>
+      </div>
+      <div class="card">
+        <span class="card-icon">novel</span>
+        <h3>Tool mutation / rug-pull</h3>
+        <p>Cross-restart SHA-256 fingerprints catch tool definitions silently changing between sessions — the supply-chain attack unique to MCP.</p>
+      </div>
+      <div class="card">
+        <span class="card-icon">gitleaks</span>
+        <h3>Secrets leakage</h3>
+        <p>AWS keys, GitHub tokens, GCP creds, JWTs, private keys — 150+ rules from gitleaks, embedded as a Go library. JSON-aware redaction preserves message validity.</p>
+      </div>
+      <div class="card">
+        <span class="card-icon">presidio</span>
+        <h3>PII / PHI / PCI</h3>
+        <p>50+ recognizers via Microsoft Presidio sidecar. HIPAA, GDPR, PCI-aware. Opt-in via <code>DVARAPALA_PRESIDIO_URL</code>.</p>
+      </div>
+      <div class="card">
+        <span class="card-icon">llm-guard</span>
+        <h3>Indirect prompt injection</h3>
+        <p>ML model + heuristics catch injection in tool outputs that would otherwise hijack the LLM. Via ProtectAI llm-guard sidecar.</p>
+      </div>
+      <div class="card">
+        <span class="card-icon">native</span>
+        <h3>Destructive actions</h3>
+        <p><code>rm -rf</code>, <code>DROP TABLE</code>, <code>dd if=…of=/dev/sd*</code>, <code>mkfs</code> — denied at the gateway before ever reaching the shell.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <h2>How it fits</h2>
+    <p class="sub">One static binary. Three deployment shapes — all sharing the same engine, detectors, audit log, and policy YAML.</p>
+
+    <div class="col-2">
+      <div>
+        <div class="diagram"><span class="accent">┌─────────────────────────────────────────┐</span>
+<span class="accent">│</span>      LLM client (Claude Code, Cursor)    <span class="accent">│</span>
+<span class="accent">│</span>  ┌────────────────┐  ┌─────────────────┐  <span class="accent">│</span>
+<span class="accent">│</span>  │ Built-in tools │  │ 3rd-party MCPs  │  <span class="accent">│</span>
+<span class="accent">│</span>  │ Read, Bash …   │  │ github, postgres│  <span class="accent">│</span>
+<span class="accent">│</span>  └───────┬────────┘  └────────┬────────┘  <span class="accent">│</span>
+<span class="accent">│</span>          │                    │           <span class="accent">│</span>
+<span class="accent">│</span>   Anthropic perms        ┌────▼─────┐     <span class="accent">│</span>
+<span class="accent">│</span>                          │ Dvarapala│ ←── <span class="accent">│</span>
+<span class="accent">│</span>                          └────┬─────┘     <span class="accent">│</span>
+<span class="accent">└──────────────────────────────────┼──────────┘</span>
+                                   ▼
+                          Real MCP servers</div>
+      </div>
+      <div>
+        <h3 style="margin-top: 0;">Three transports</h3>
+        <p style="color: var(--dim); margin-bottom: 18px;">All three ship in one binary, all three reuse the same policy + detector pipeline.</p>
+        <ul style="color: var(--dim); padding-left: 20px; line-height: 1.9;">
+          <li><strong style="color: var(--fg);">wrap</strong> — stdio passthrough for npx-based MCPs. Drops into Claude Code / Desktop / Cursor / Cline configs.</li>
+          <li><strong style="color: var(--fg);">proxy</strong> — HTTP / Streamable-HTTP / SSE relay for hosted MCPs (Atlassian, Sentry, internal microservices).</li>
+          <li><strong style="color: var(--fg);">hub</strong> — one Dvarapala fronting many MCPs — the enterprise shape.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>What you see</h2>
+    <p class="sub">Every JSON-RPC message in either direction is parsed, evaluated, audited. <code>dvarapala logs</code> renders the audit stream as a per-MCP, per-tool, per-action timeline.</p>
+
+    <div class="term">
+      <div class="term-bar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="title">~ — dvarapala logs -f</span>
+      </div>
+<pre class="term-body"><span class="prompt">$</span> dvarapala logs -f
+
+<span class="ts">14:03:01</span>  <span class="srv">deepwiki    </span>  <span class="arrow-in">→</span>  <span class="allow">allow </span>  tools/list
+<span class="ts">14:03:02</span>  <span class="srv">deepwiki    </span>  <span class="arrow-out">←</span>  <span class="allow">allow </span>  tools/list → 3 tools
+<span class="ts">14:03:02</span>  <span class="srv">filesystem  </span>  <span class="arrow-in">→</span>  <span class="allow">allow </span>  tools/list
+<span class="ts">14:03:02</span>  <span class="srv">filesystem  </span>  <span class="arrow-out">←</span>  <span class="allow">allow </span>  tools/list → 14 tools
+<span class="ts">14:03:59</span>  <span class="srv">deepwiki    </span>  <span class="arrow-in">→</span>  <span class="allow">allow </span>  ask_question(repoName="facebook/react", question="What is React?")
+<span class="ts">14:04:04</span>  <span class="srv">deepwiki    </span>  <span class="arrow-out">←</span>  <span class="allow">allow </span>  ask_question → React is a JavaScript library for building UIs…
+<span class="ts">14:05:11</span>  <span class="srv">filesystem  </span>  <span class="arrow-out">←</span>  <span class="redact">redact</span>  read_file → key=[REDACTED:aws-access-token]
+            <span class="reason">// Secret in tool output redacted (gitleaks)  <span class="rule">[redact-secrets-in-tool-output]</span></span>
+<span class="ts">14:06:30</span>  <span class="srv">shell       </span>  <span class="arrow-in">→</span>  <span class="deny">deny  </span>  exec(command="rm -rf /")
+            <span class="reason">// Destructive shell command blocked  <span class="rule">[deny-destructive-actions]</span></span></pre>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Composed, not reinvented</h2>
+    <p class="sub">Detection of well-defined classes is delegated to existing OSS — Dvarapala is the MCP-aware layer that glues them together.</p>
+    <div class="grid">
+      <div class="card"><h3>gitleaks</h3><p>150+ secret-detection rules, embedded as a Go library. No subprocess, no network call.</p></div>
+      <div class="card"><h3>Microsoft Presidio</h3><p>PII / PHI / PCI recognition, 50+ entity types. Sidecar HTTP service.</p></div>
+      <div class="card"><h3>ProtectAI llm-guard</h3><p>Prompt-injection detection (ML + heuristics). Sidecar HTTP service.</p></div>
+      <div class="card"><h3>NVIDIA garak + Azure PyRIT</h3><p>Adversarial test scenarios, curated into the attack-corpus fixture format.</p></div>
+      <div class="card"><h3>mark3labs/mcp-go</h3><p>Typed MCP message structs where useful; raw JSON-RPC where transparency matters.</p></div>
+      <div class="card"><h3>GoReleaser</h3><p>Cross-platform binaries, signed checksums, SBOMs, multi-arch container images, all in one config.</p></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>
+      MIT licensed · <a href="https://github.com/TharVid/dvarapala">GitHub</a> ·
+      <a href="https://github.com/TharVid/dvarapala/blob/main/CHANGELOG.md">Changelog</a> ·
+      <a href="https://github.com/TharVid/dvarapala/blob/main/docs/architecture.md">Architecture</a> ·
+      <a href="https://github.com/TharVid/dvarapala/blob/main/docs/policy-language.md">Policy</a>
+    </p>
+    <p>Built by <a href="https://tharvid.in">TharVid</a>.</p>
+  </div>
+</footer>
+
+</body>
+</html>

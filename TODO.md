@@ -82,7 +82,7 @@ Currently 5 fixtures. Target ~50 for a credible evaluation. Sources:
 - [ ] **`dvarapala uninstall --client claude-code`** — undo `--wrap-all`
 - [ ] **`dvarapala scan --format sarif`** — for CI integration
 - [ ] **`dvarapala policy diff old.yaml new.yaml`** — see what changed
-- [ ] **Static site at `dvarapala.tharvid.in`** — GitHub Pages, doc landing page
+- [x] **Static site at `dvarapala.tharvid.in`** — single-page landing on GitHub Pages, served from repo root via CNAME
 
 ## 💤 Stretch
 
