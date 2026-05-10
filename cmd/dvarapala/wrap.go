@@ -120,11 +120,15 @@ func buildDetectorRegistry() (*detectors.Registry, error) {
 }
 
 func defaultAuditPath() string {
+	return filepath.Join(defaultStoreDir(), "audit.jsonl")
+}
+
+func defaultStoreDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "audit.jsonl"
+		return ".dvarapala"
 	}
-	return filepath.Join(home, ".dvarapala", "audit.jsonl")
+	return filepath.Join(home, ".dvarapala")
 }
 
 func expandHome(p string) string {

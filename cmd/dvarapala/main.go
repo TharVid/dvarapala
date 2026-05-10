@@ -60,6 +60,8 @@ func run(ctx context.Context, args []string) error {
 		return cmdScan(ctx, rest)
 	case "doctor":
 		return cmdDoctor(ctx, rest)
+	case "daemon":
+		return cmdDaemon(ctx, rest)
 	case "logs":
 		return cmdLogs(ctx, rest)
 	case "version", "-v", "--version":
@@ -86,9 +88,10 @@ COMMANDS
   init       Scaffold a default policy file
   lint       Validate a policy file
   test       Run an attack case against a policy
-  install    Auto-install into a known MCP client (Claude Desktop, Cursor, Cline)
+  install    Wrap MCP servers in a known client config (--wrap-all to do all at once)
   scan       One-shot security scan of an MCP server
   doctor     Diagnose installation and configuration
+  daemon     Manage background HTTP-proxy daemons (list / stop NAME / stop-all)
   logs       Pretty-print or follow the audit log
   version    Print version info
 

@@ -69,7 +69,12 @@ dvarapala install --client claude-code --wrap-all
 dvarapala logs -f
 ```
 
-`--wrap-all` reads `~/.claude.json`, finds every stdio MCP server, and rewrites each entry to route through `dvarapala wrap` with your policy. HTTP-based servers (claude.ai-managed Atlassian, Sentry, etc.) are skipped with a note pointing to `dvarapala proxy`. Already-wrapped entries are left alone — re-running is a no-op.
+`--wrap-all` reads `~/.claude.json`, finds every MCP server, and:
+
+- For **stdio MCPs** (npx-based, etc.): rewrites the entry to route through `dvarapala wrap` with your policy.
+- For **HTTP/SSE MCPs**: spawns a detached `dvarapala proxy` daemon in the background (invisible to you), points the client URL at the local proxy. Manage with `dvarapala daemon list | stop NAME | stop-all`.
+
+Already-wrapped/proxied entries are left alone — the command is idempotent. Run it again whenever you `claude mcp add` a new server.
 
 Same flag works for the other clients:
 
@@ -143,6 +148,7 @@ See **[docs/built-in-rules.md](docs/built-in-rules.md)** for rule packs and **[d
 | `dvarapala scan --command CMD` | One-shot security audit of any MCP server |
 | `dvarapala install --client CLIENT --server NAME --command CMD` | Auto-edit MCP-client config |
 | `dvarapala doctor` | Diagnose installation, policy, sidecars, configs |
+| `dvarapala daemon list \| stop NAME \| stop-all \| remove NAME \| clean` | Manage background HTTP-proxy daemons spawned by `--wrap-all` |
 | `dvarapala logs [-f]` | Pretty-print or tail the audit log |
 | `dvarapala version` | Print version info |
 

@@ -166,6 +166,26 @@ dvarapala install --client CLIENT --server NAME --command "CMD ARGS..."
 
 Both modes back the existing config up to `<file>.bak` before editing.
 
+## `dvarapala daemon`
+
+Manage background `dvarapala proxy` daemons spawned by `dvarapala install --wrap-all`. Records live under `~/.dvarapala/daemons/<name>.json`; logs under `~/.dvarapala/daemons/<name>.log`.
+
+```bash
+dvarapala daemon list             # show every recorded daemon + live PID
+dvarapala daemon stop NAME        # SIGTERM the proc; KEEP the record (so --wrap-all can re-spawn)
+dvarapala daemon stop-all         # stop every running daemon; records kept
+dvarapala daemon remove NAME      # stop AND delete the record
+dvarapala daemon clean            # remove records of dead daemons (housekeeping)
+```
+
+Lifecycle pattern that just works:
+
+```bash
+dvarapala install --client claude-code --wrap-all      # spawns proxies for HTTP MCPs
+dvarapala daemon stop-all                              # before reboot / when shutting down
+dvarapala install --client claude-code --wrap-all      # after reboot — re-spawns from records
+```
+
 ## `dvarapala doctor`
 
 Single-screen health check. Prints binary version, Go runtime, policy parse, audit dir writability, sidecar reachability, and a one-line summary per MCP-client config (claude-code, claude-desktop, cursor, cline).

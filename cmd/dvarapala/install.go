@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -144,13 +145,18 @@ func rewriteMCPConfig(path, serverName, binary string, wrappedArgs []string) err
 	return nil
 }
 
-// wrapAllMCPs reads the client config, wraps every stdio MCP server in
-// place with `dvarapala wrap --policy POLICY -- ORIGINAL_CMD ORIGINAL_ARGS`,
-// and writes the result back.
+// wrapAllMCPs reads the client config and protects every MCP server in place:
 //
-// Skipped silently:
-//   - servers whose `command` is already this binary (already wrapped)
-//   - servers with a `url` field instead of `command` (HTTP/SSE — use proxy)
+//   - stdio servers (have `command:`) get rewritten to route through
+//     `dvarapala wrap --policy POLICY -- ORIGINAL_CMD ORIGINAL_ARGS`.
+//   - HTTP/SSE servers (have `url:`) get a background `dvarapala proxy`
+//     daemon spawned (detached, invisible to the user — Setsid on Unix,
+//     DETACHED_PROCESS on Windows). The daemon's PID is recorded under
+//     ~/.dvarapala/daemons/<name>.json so `dvarapala daemon list/stop/
+//     stop-all` can manage it later. The client config is rewritten to
+//     point at the local proxy listen URL.
+//   - Already-wrapped or already-proxied entries are left alone
+//     (idempotent).
 func wrapAllMCPs(cfgPath, binary, policyPath string) error {
 	cfg, err := readConfigForEdit(cfgPath)
 	if err != nil {
@@ -162,57 +168,103 @@ func wrapAllMCPs(cfgPath, binary, policyPath string) error {
 	}
 
 	binaryAbs, _ := filepath.Abs(binary)
-	wrapped := 0
-	skippedAlready := 0
-	skippedHTTP := []string{}
-	wrappedNames := []string{}
+	auditPath := defaultAuditPath()
 
-	for name, raw := range rawServers {
-		entry, ok := raw.(map[string]any)
+	// Ports already in use by previously-spawned daemons should not be
+	// reassigned to a fresh proxy.
+	used := map[int]bool{}
+	if existing, _ := loadDaemonRecords(); existing != nil {
+		for _, r := range existing {
+			used[portFromListen(r.Listen)] = true
+		}
+	}
+
+	wrappedStdio := []string{}
+	proxiedHTTP := []string{}
+	skippedAlready := 0
+
+	// Sort names so output is deterministic across runs.
+	names := make([]string, 0, len(rawServers))
+	for n := range rawServers {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		entry, ok := rawServers[name].(map[string]any)
 		if !ok {
 			continue
 		}
-		// HTTP / URL upstream → skip (proxy mode is the right tool)
-		if _, hasURL := entry["url"]; hasURL {
-			skippedHTTP = append(skippedHTTP, name)
+
+		// HTTP/SSE upstream → spawn a detached proxy daemon for it.
+		if rawURL, hasURL := entry["url"].(string); hasURL && rawURL != "" {
+			isLocal := strings.Contains(rawURL, "127.0.0.1:") || strings.Contains(rawURL, "localhost:")
+			if isLocal {
+				// URL already points local. Check for a matching daemon
+				// record — if its process is alive, the entry is genuinely
+				// already proxied. If the record exists but the process is
+				// dead, re-spawn from the record (recovers from a previous
+				// `daemon stop` or reboot). If neither, the local URL is
+				// stale and there's nothing for us to do automatically.
+				if rec, exists := findDaemonRecord(name); exists {
+					if processAlive(rec.PID) {
+						skippedAlready++
+						continue
+					}
+					// Re-spawn at the same listen port using the saved upstream.
+					newRec, perr := spawnProxy(binary, name, rec.Upstream, rec.Listen, policyPath, auditPath)
+					if perr != nil {
+						return fmt.Errorf("re-spawn proxy for %q: %w", name, perr)
+					}
+					proxiedHTTP = append(proxiedHTTP, fmt.Sprintf("%s → %s (pid %d, re-spawned)", name, rec.Listen, newRec.PID))
+					continue
+				}
+				skippedAlready++
+				continue
+			}
+			port, perr := pickFreePort(portStartHint(), used)
+			if perr != nil {
+				return fmt.Errorf("server %q: %w", name, perr)
+			}
+			listen := fmt.Sprintf("127.0.0.1:%d", port)
+			rec, perr := spawnProxy(binary, name, rawURL, listen, policyPath, auditPath)
+			if perr != nil {
+				return fmt.Errorf("spawn proxy for %q: %w", name, perr)
+			}
+			localURL := "http://" + listen
+			newEntry := map[string]any{"url": localURL}
+			if t, ok := entry["type"]; ok {
+				newEntry["type"] = t
+			}
+			rawServers[name] = newEntry
+			proxiedHTTP = append(proxiedHTTP, fmt.Sprintf("%s → %s (pid %d)", name, listen, rec.PID))
 			continue
 		}
+
+		// stdio — wrap with dvarapala wrap.
 		cmd, _ := entry["command"].(string)
 		if cmd == "" {
 			continue
 		}
-		// Already wrapped? Check by binary path equality on either the raw
-		// or absolute form of `command`.
-		if cmd == binary || cmd == binaryAbs ||
-			filepath.Base(cmd) == "dvarapala" {
+		if cmd == binary || cmd == binaryAbs || filepath.Base(cmd) == "dvarapala" {
 			skippedAlready++
 			continue
 		}
-
-		// Build the wrapped args: [wrap, --policy, POLICY, --, ORIGINAL_CMD, ORIGINAL_ARGS...]
 		origArgs := stringSlice(entry["args"])
 		wrappedArgs := append([]string{"wrap", "--policy", policyPath, "--", cmd}, origArgs...)
-
 		newEntry := map[string]any{
 			"command": binary,
 			"args":    wrappedArgs,
 		}
-		// Preserve env and any other fields the client cares about.
 		if env, ok := entry["env"]; ok {
 			newEntry["env"] = env
 		}
 		rawServers[name] = newEntry
-		wrapped++
-		wrappedNames = append(wrappedNames, name)
+		wrappedStdio = append(wrappedStdio, name)
 	}
 
-	if wrapped == 0 {
-		fmt.Fprintf(os.Stderr, "nothing to do — %d already wrapped, %d HTTP/URL servers skipped\n",
-			skippedAlready, len(skippedHTTP))
-		if len(skippedHTTP) > 0 {
-			fmt.Fprintf(os.Stderr, "  HTTP servers: %s\n", strings.Join(skippedHTTP, ", "))
-			fmt.Fprintln(os.Stderr, "  → use 'dvarapala proxy --upstream URL' for those")
-		}
+	if len(wrappedStdio) == 0 && len(proxiedHTTP) == 0 {
+		fmt.Fprintf(os.Stderr, "nothing to do — %d entries already wrapped/proxied\n", skippedAlready)
 		return nil
 	}
 
@@ -220,16 +272,22 @@ func wrapAllMCPs(cfgPath, binary, policyPath string) error {
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "wrote %s (backup at %s.bak)\n", cfgPath, cfgPath)
-	fmt.Fprintf(os.Stderr, "wrapped %d stdio MCP server(s): %s\n", wrapped, strings.Join(wrappedNames, ", "))
-	if skippedAlready > 0 {
-		fmt.Fprintf(os.Stderr, "  %d already wrapped (left as-is)\n", skippedAlready)
+	if len(wrappedStdio) > 0 {
+		fmt.Fprintf(os.Stderr, "wrapped %d stdio MCP server(s): %s\n",
+			len(wrappedStdio), strings.Join(wrappedStdio, ", "))
 	}
-	if len(skippedHTTP) > 0 {
-		fmt.Fprintf(os.Stderr, "  %d HTTP/URL server(s) skipped: %s\n", len(skippedHTTP), strings.Join(skippedHTTP, ", "))
-		fmt.Fprintln(os.Stderr, "  → use 'dvarapala proxy --upstream URL' for those")
+	if len(proxiedHTTP) > 0 {
+		fmt.Fprintf(os.Stderr, "spawned %d HTTP proxy daemon(s) in background:\n", len(proxiedHTTP))
+		for _, line := range proxiedHTTP {
+			fmt.Fprintf(os.Stderr, "  %s\n", line)
+		}
+		fmt.Fprintln(os.Stderr, "  manage with: dvarapala daemon list | stop NAME | stop-all")
+	}
+	if skippedAlready > 0 {
+		fmt.Fprintf(os.Stderr, "  %d already wrapped/proxied (left as-is)\n", skippedAlready)
 	}
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "next: restart your MCP client so the new wrappers take effect.")
+	fmt.Fprintln(os.Stderr, "next: restart your MCP client so it picks up the new endpoints.")
 	return nil
 }
 

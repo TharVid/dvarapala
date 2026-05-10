@@ -4,17 +4,39 @@ Claude Code reads MCP servers from `~/.claude.json` (user-scope, applies to ever
 
 ## Wrap everything in one shot (recommended)
 
-If you already have MCP servers configured in Claude Code, use `--wrap-all`:
-
 ```bash
 dvarapala install --client claude-code --wrap-all
 ```
 
-That reads `~/.claude.json`, finds every stdio MCP server, and rewrites each entry to route through `dvarapala wrap`. Already-wrapped entries are left alone (idempotent). HTTP-based servers (the cloud ones managed by claude.ai — Atlassian, Sentry, Slack, etc.) are skipped with a note pointing to `dvarapala proxy`.
+Reads `~/.claude.json` and protects every MCP server in one go:
 
-Restart Claude Code so the new child processes spawn with Dvarapala in front.
+- **stdio MCPs** (`command: npx ...`): rewritten to route through `dvarapala wrap` with your policy.
+- **HTTP/SSE MCPs** (`url: https://...`): a detached `dvarapala proxy` daemon spawns in the background, the client URL is rewritten to point at the local proxy port. The daemon survives the parent shell exit (Setsid on Unix, DETACHED_PROCESS on Windows) — no terminal stays attached to it.
+- Already-wrapped or already-proxied entries are left alone. Re-running is a no-op (idempotent).
 
-Re-run `dvarapala install --client claude-code --wrap-all` any time you `claude mcp add` a new stdio server — the new entry gets wrapped, existing wrapped ones stay as-is.
+Restart Claude Code so it picks up the new endpoints.
+
+### Manage the spawned proxies
+
+Daemons launched by `--wrap-all` are recorded under `~/.dvarapala/daemons/`:
+
+```bash
+dvarapala daemon list             # which proxies are running
+dvarapala daemon stop NAME        # pause one (record kept; --wrap-all will re-spawn)
+dvarapala daemon stop-all         # before reboot / shutdown
+dvarapala daemon remove NAME      # stop + delete the record (full cleanup)
+dvarapala daemon clean            # remove records of dead daemons
+```
+
+The recommended boot/shutdown loop:
+
+```bash
+# Whenever you (re)start working
+dvarapala install --client claude-code --wrap-all
+
+# Before logging out / rebooting
+dvarapala daemon stop-all
+```
 
 ## Single-server install
 
