@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 
 	"github.com/tharvid/dvarapala/internal/audit"
+	"github.com/tharvid/dvarapala/internal/config"
+	"github.com/tharvid/dvarapala/internal/policy"
 	"github.com/tharvid/dvarapala/internal/proxy"
 )
 
@@ -18,15 +20,14 @@ func cmdWrap(ctx context.Context, args []string) error {
 		policyPath string
 		auditPath  string
 	)
-	fs.StringVar(&policyPath, "policy", "", "path to policy YAML (Phase 1: parsed but not enforced)")
+	fs.StringVar(&policyPath, "policy", "", "path to policy YAML (empty = transparent passthrough)")
 	fs.StringVar(&auditPath, "audit", defaultAuditPath(), "path to audit log (JSONL)")
 	fs.Usage = func() {
 		fmt.Fprint(fs.Output(), `Usage: dvarapala wrap [flags] -- <command> [args...]
 
 Wrap an MCP stdio server with the Dvarapala gateway. Every JSON-RPC message
-in either direction is parsed and audited; in Phase 1 all messages are
-forwarded unchanged ("transparent passthrough"). Policy enforcement lands
-in Phase 2.
+in either direction is parsed, evaluated against the policy, audited, and
+forwarded (or denied with a synthesised JSON-RPC error).
 
 Flags:
 `)
@@ -50,7 +51,14 @@ Example:
 		return errors.New("missing command after '--'")
 	}
 
-	_ = policyPath // TODO(phase-2): load and enforce.
+	pol, err := config.Load(policyPath)
+	if err != nil {
+		return fmt.Errorf("load policy: %w", err)
+	}
+	eng, err := policy.NewEngine(pol.Rules, policy.ActionAllow)
+	if err != nil {
+		return fmt.Errorf("compile policy: %w", err)
+	}
 
 	log, err := audit.Open(expandHome(auditPath))
 	if err != nil {
@@ -61,6 +69,7 @@ Example:
 	code, err := proxy.RunStdio(ctx, proxy.StdioOptions{
 		Command: cmd,
 		Audit:   log,
+		Engine:  eng,
 	})
 	if err != nil {
 		return err

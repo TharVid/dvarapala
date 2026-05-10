@@ -6,9 +6,8 @@ import (
 	"fmt"
 )
 
-// All command handlers below are stubs that panic-print a friendly message.
-// Implementations land as the corresponding internal/* packages are filled in.
-// (cmdWrap is implemented in wrap.go.)
+// Stubs for commands not yet implemented. Implementations live in their
+// own files (wrap.go, init.go, lint.go, test.go, logs.go).
 
 func cmdProxy(_ context.Context, _ []string) error {
 	return fmt.Errorf("proxy: %w", errNotImplemented)
@@ -16,18 +15,6 @@ func cmdProxy(_ context.Context, _ []string) error {
 
 func cmdHub(_ context.Context, _ []string) error {
 	return fmt.Errorf("hub: %w", errNotImplemented)
-}
-
-func cmdInit(_ context.Context, _ []string) error {
-	return fmt.Errorf("init: %w", errNotImplemented)
-}
-
-func cmdLint(_ context.Context, _ []string) error {
-	return fmt.Errorf("lint: %w", errNotImplemented)
-}
-
-func cmdTest(_ context.Context, _ []string) error {
-	return fmt.Errorf("test: %w", errNotImplemented)
 }
 
 func cmdInstall(_ context.Context, _ []string) error {

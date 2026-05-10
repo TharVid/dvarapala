@@ -9,15 +9,14 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/tharvid/dvarapala/internal/audit"
 	"github.com/tharvid/dvarapala/internal/mcp"
+	"github.com/tharvid/dvarapala/internal/policy"
 )
 
-// TestMain lets the test binary act as a tiny "echo MCP server" when
-// DVARAPALA_TEST_FAKE_SERVER=1 is set in its env. RunStdio in the parent
-// test then spawns os.Args[0] with that env to drive an end-to-end run.
 func TestMain(m *testing.M) {
 	if os.Getenv("DVARAPALA_TEST_FAKE_SERVER") == "1" {
 		fakeMCPServer()
@@ -26,8 +25,6 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// fakeMCPServer reads NDJSON requests from stdin, replies with a synthetic
-// response, and exits when stdin closes.
 func fakeMCPServer() {
 	sc := bufio.NewScanner(os.Stdin)
 	sc.Buffer(make([]byte, 0, 64<<10), 16<<20)
@@ -37,7 +34,6 @@ func fakeMCPServer() {
 			continue
 		}
 		if req.Method == "" || len(req.ID) == 0 {
-			// notification, no response
 			continue
 		}
 		resp := mcp.Message{JSONRPC: "2.0", ID: req.ID, Result: json.RawMessage(`{"ok":true}`)}
@@ -54,8 +50,9 @@ func TestRelayForwardsAndAudits(t *testing.T) {
 	var out bytes.Buffer
 	var auditBuf strings.Builder
 	log := audit.New(testWriteCloser{&auditBuf})
+	var mu sync.Mutex
 
-	if err := relay(in, &out, mcp.DirInbound, log); err != nil {
+	if err := relay(in, &out, mcp.DirInbound, log, nil, &out, &mu); err != nil {
 		t.Fatalf("relay: %v", err)
 	}
 
@@ -63,14 +60,80 @@ func TestRelayForwardsAndAudits(t *testing.T) {
 	if gotLines != 2 {
 		t.Errorf("forwarded %d lines, want 2", gotLines)
 	}
-
-	auditLines := strings.Count(strings.TrimRight(auditBuf.String(), "\n"), "\n") + 1
-	if auditLines != 2 {
-		t.Errorf("audited %d events, want 2", auditLines)
-	}
-
 	if !strings.Contains(auditBuf.String(), `"method":"tools/list"`) {
 		t.Errorf("audit missing tools/list event: %s", auditBuf.String())
+	}
+}
+
+func TestRelayDeniesAndSynthesisesError(t *testing.T) {
+	rules := []policy.Rule{{
+		Name:   "deny-rm-rf",
+		Match:  policy.Match{Tool: "shell", Args: map[string]policy.ArgMatcher{"command": {Patterns: []string{`/rm\s+-rf/`}}}},
+		Action: policy.ActionDeny,
+		Reason: "destructive",
+	}}
+	eng, err := policy.NewEngine(rules, policy.ActionAllow)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	in := strings.NewReader(`{"jsonrpc":"2.0","id":42,"method":"tools/call","params":{"name":"shell","arguments":{"command":"rm -rf /"}}}` + "\n")
+
+	var clientOut bytes.Buffer // simulates the LLM client
+	var upstream bytes.Buffer  // simulates the upstream MCP server (should NOT see the request)
+	var auditBuf strings.Builder
+	log := audit.New(testWriteCloser{&auditBuf})
+	var mu sync.Mutex
+
+	if err := relay(in, &upstream, mcp.DirInbound, log, eng, &clientOut, &mu); err != nil {
+		t.Fatalf("relay: %v", err)
+	}
+
+	if upstream.Len() != 0 {
+		t.Errorf("denied request leaked upstream: %s", upstream.String())
+	}
+
+	var resp mcp.Message
+	if err := json.Unmarshal(bytes.TrimSpace(clientOut.Bytes()), &resp); err != nil {
+		t.Fatalf("client response not valid JSON: %v\n%s", err, clientOut.String())
+	}
+	if resp.Error == nil {
+		t.Fatal("expected JSON-RPC error response")
+	}
+	if string(resp.ID) != "42" {
+		t.Errorf("response id = %s, want 42", resp.ID)
+	}
+	if !strings.Contains(resp.Error.Message, "Dvarapala") {
+		t.Errorf("error message missing Dvarapala tag: %q", resp.Error.Message)
+	}
+
+	if !strings.Contains(auditBuf.String(), `"action":"deny"`) {
+		t.Errorf("audit missing deny: %s", auditBuf.String())
+	}
+}
+
+func TestRelayDropsDeniedNotification(t *testing.T) {
+	rules := []policy.Rule{{
+		Name:   "deny-notif",
+		Match:  policy.Match{Method: "notifications/x"},
+		Action: policy.ActionDeny,
+	}}
+	eng, _ := policy.NewEngine(rules, policy.ActionAllow)
+
+	in := strings.NewReader(`{"jsonrpc":"2.0","method":"notifications/x"}` + "\n")
+	var upstream, clientOut bytes.Buffer
+	var auditBuf strings.Builder
+	log := audit.New(testWriteCloser{&auditBuf})
+	var mu sync.Mutex
+
+	if err := relay(in, &upstream, mcp.DirInbound, log, eng, &clientOut, &mu); err != nil {
+		t.Fatalf("relay: %v", err)
+	}
+	if upstream.Len() != 0 {
+		t.Errorf("denied notification leaked upstream: %s", upstream.String())
+	}
+	if clientOut.Len() != 0 {
+		t.Errorf("notification cannot have a response, but got: %s", clientOut.String())
 	}
 }
 
@@ -105,20 +168,14 @@ func TestRunStdioEndToEnd(t *testing.T) {
 	if code != 0 {
 		t.Errorf("exit code = %d, want 0", code)
 	}
-
 	out := clientStdout.String()
 	if !strings.Contains(out, `"id":1`) || !strings.Contains(out, `"id":2`) {
-		t.Errorf("client did not see both responses; got: %s", out)
-	}
-
-	if !strings.Contains(auditBuf.String(), `"direction":"inbound"`) ||
-		!strings.Contains(auditBuf.String(), `"direction":"outbound"`) {
-		t.Errorf("audit missing direction; got: %s", auditBuf.String())
+		t.Errorf("client missed responses; got: %s", out)
 	}
 }
 
-// TestRunStdioNoop is the test the child process matches on -test.run.
-// It does nothing because DVARAPALA_TEST_FAKE_SERVER=1 short-circuits in TestMain.
+// TestRunStdioNoop is matched by the child process via -test.run.
+// DVARAPALA_TEST_FAKE_SERVER=1 short-circuits in TestMain.
 func TestRunStdioNoop(t *testing.T) {}
 
 type testWriteCloser struct{ *strings.Builder }

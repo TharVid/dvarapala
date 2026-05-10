@@ -29,15 +29,20 @@
 - [x] Unit tests + end-to-end test using the test binary as a fake MCP server
 - [x] CLI flag parsing for `--policy`, `--audit`
 
-## Phase 2 — Policy engine + audit log (v0.2.0)
+## Phase 2 — Policy engine + audit log ✅ (this commit)
 
-- [ ] `internal/config/policy.go` — YAML schema + loader
-- [ ] `internal/policy/engine.go` — embed [Open Policy Agent](https://github.com/open-policy-agent/opa) Go SDK; compile YAML rules to Rego
-- [ ] `internal/audit` — JSONL writer + OCSF mapper
-- [ ] OpenTelemetry hooks (traces + metrics)
-- [ ] `dvarapala lint POLICY` — schema validation
-- [ ] `dvarapala test POLICY --case ATTACK.json` — run a corpus case
-- [ ] `dvarapala init` — write default policy.yaml
+Native YAML-first policy engine (no OPA — would have been reinventing for our schema; we'll add OPA/CEL if rule complexity ever demands it). Phase 2's `destructive-001` attack-corpus case passes end-to-end.
+
+- [x] `internal/config/loader.go` — YAML schema loader + rulepack expansion via `policies.FS` embed
+- [x] `internal/policy/engine.go` — first-match-wins evaluator with regex / glob / exact match
+- [x] `policies/embed.go` — embed.FS for default rule packs
+- [x] `internal/proxy/stdio.go` — engine wired in: `deny` synthesises a JSON-RPC error to client; `log_only` audits-and-forwards
+- [x] `dvarapala init` — writes default `~/.dvarapala/policy.yaml` (with `--with-packs` debug flag)
+- [x] `dvarapala lint POLICY` — schema + rule-compile validation
+- [x] `dvarapala test POLICY --case ATTACK.json` — runs an attack-corpus case
+- [x] `dvarapala logs` — pretty (colourised) / `-f` follow / `-n N` last-N / `--json`
+- [ ] OpenTelemetry hooks (deferred — optional)
+- [ ] OCSF audit schema mapper (deferred — JSONL is sufficient for v0.2)
 
 ## Phase 3 — Detector integrations (v0.3.0)
 
