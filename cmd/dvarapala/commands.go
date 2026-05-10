@@ -6,43 +6,39 @@ import (
 	"fmt"
 )
 
-// All command handlers below are intentional skeletons for the initial
-// scaffold. Implementations land in subsequent commits as the corresponding
-// internal/* packages are filled in.
+// All command handlers below are stubs that panic-print a friendly message.
+// Implementations land as the corresponding internal/* packages are filled in.
+// (cmdWrap is implemented in wrap.go.)
 
-func cmdWrap(ctx context.Context, args []string) error {
-	return fmt.Errorf("wrap: %w", errNotImplemented)
-}
-
-func cmdProxy(ctx context.Context, args []string) error {
+func cmdProxy(_ context.Context, _ []string) error {
 	return fmt.Errorf("proxy: %w", errNotImplemented)
 }
 
-func cmdHub(ctx context.Context, args []string) error {
+func cmdHub(_ context.Context, _ []string) error {
 	return fmt.Errorf("hub: %w", errNotImplemented)
 }
 
-func cmdInit(ctx context.Context, args []string) error {
+func cmdInit(_ context.Context, _ []string) error {
 	return fmt.Errorf("init: %w", errNotImplemented)
 }
 
-func cmdLint(ctx context.Context, args []string) error {
+func cmdLint(_ context.Context, _ []string) error {
 	return fmt.Errorf("lint: %w", errNotImplemented)
 }
 
-func cmdTest(ctx context.Context, args []string) error {
+func cmdTest(_ context.Context, _ []string) error {
 	return fmt.Errorf("test: %w", errNotImplemented)
 }
 
-func cmdInstall(ctx context.Context, args []string) error {
+func cmdInstall(_ context.Context, _ []string) error {
 	return fmt.Errorf("install: %w", errNotImplemented)
 }
 
-func cmdScan(ctx context.Context, args []string) error {
+func cmdScan(_ context.Context, _ []string) error {
 	return fmt.Errorf("scan: %w", errNotImplemented)
 }
 
-func cmdDoctor(ctx context.Context, args []string) error {
+func cmdDoctor(_ context.Context, _ []string) error {
 	return fmt.Errorf("doctor: %w", errNotImplemented)
 }
 

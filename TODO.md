@@ -18,16 +18,16 @@
 - [x] Docs: getting-started, architecture, policy-language, built-in-rules, deployment guides
 - [x] Attack corpus scaffold + initial scenarios
 
-## Phase 1 — MCP stdio passthrough proxy (v0.1.0)
+## Phase 1 — MCP stdio passthrough proxy ✅ (this commit)
 
-Goal: `dvarapala wrap -- <cmd>` works as a transparent passthrough — no policy yet, just proves the wire.
+`dvarapala wrap -- <cmd>` works end-to-end as a transparent passthrough. Smoke-tested against `@modelcontextprotocol/server-filesystem` returning 14 tools.
 
-- [ ] Integrate `github.com/mark3labs/mcp-go` for protocol parsing
-- [ ] `internal/proxy/stdio.go` — bidirectional stdio relay with JSON-RPC parsing
-- [ ] `internal/mcp/jsonrpc.go` — typed messages
-- [ ] Graceful shutdown: SIGTERM/SIGINT, close upstream cleanly
-- [ ] Unit tests for stdio multiplex
-- [ ] E2E: wrap `@modelcontextprotocol/server-filesystem`, run a real `tools/list` from a fake client
+- [x] `internal/mcp/jsonrpc.go` — JSON-RPC 2.0 Message + NDJSON Scanner (no third-party MCP lib needed for stdio framing)
+- [x] `internal/audit/audit.go` — thread-safe JSONL audit logger
+- [x] `internal/proxy/stdio.go` — bidirectional stdio relay with parse + audit + forward
+- [x] Graceful shutdown via `cmd.Cancel` (SIGINT) + `cmd.WaitDelay` (5s SIGKILL fallback)
+- [x] Unit tests + end-to-end test using the test binary as a fake MCP server
+- [x] CLI flag parsing for `--policy`, `--audit`
 
 ## Phase 2 — Policy engine + audit log (v0.2.0)
 
