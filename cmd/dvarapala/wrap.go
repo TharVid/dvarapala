@@ -14,6 +14,8 @@ import (
 	"github.com/tharvid/dvarapala/internal/detectors/pii"
 	"github.com/tharvid/dvarapala/internal/detectors/promptinjection"
 	"github.com/tharvid/dvarapala/internal/detectors/secrets"
+	"github.com/tharvid/dvarapala/internal/detectors/toolmutation"
+	"github.com/tharvid/dvarapala/internal/detectors/toolpoisoning"
 	"github.com/tharvid/dvarapala/internal/policy"
 	"github.com/tharvid/dvarapala/internal/proxy"
 )
@@ -106,6 +108,8 @@ func buildDetectorRegistry() (*detectors.Registry, error) {
 		return nil, fmt.Errorf("gitleaks: %w", err)
 	}
 	r.Register(gl)
+	r.Register(toolpoisoning.New())
+	r.Register(toolmutation.New())
 	if u := os.Getenv("DVARAPALA_PRESIDIO_URL"); u != "" {
 		r.Register(pii.New(u))
 	}

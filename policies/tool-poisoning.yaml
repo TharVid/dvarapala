@@ -1,47 +1,24 @@
 # Tool poisoning rule pack — Dvarapala's NATIVE detector.
 #
-# This is a class of attack specific to MCP that no off-the-shelf library covers.
-# It detects malicious instructions hidden inside tool DESCRIPTIONS (which the
-# LLM reads when listing tools), as opposed to malicious tool inputs/outputs.
+# Detects prompt-injection patterns embedded in MCP tool descriptions.
+# This is a class of attack specific to MCP that no off-the-shelf library
+# covers. Reference: HiddenLayer & Anthropic published advisories on
+# tool-description injection / "line-jumping" attacks against MCP in 2024–2025.
 #
-# Reference: HiddenLayer & Anthropic published advisories on tool-description
-# injection / "line-jumping" attacks against MCP in 2024–2025.
+# Detection delegates to the in-process tool-poisoning detector
+# (internal/detectors/toolpoisoning), which runs hand-curated regexes
+# covering "ignore previous instructions", system-tag injection,
+# credential-prompt fragments, and DAN-style jailbreaks.
 
 pack: tool-poisoning
 description: Detect malicious instructions hidden in MCP tool descriptions
-detector: dvarapala-native
+detector: tool-poisoning
 
 rules:
-  - name: detect-line-jumping
+  - name: deny-tool-description-injection
     match:
-      direction: inbound
-      method: tools/list   # JSON-RPC method
-      tool_description_matches:
-        # Phrases that hint at a tool description trying to override system prompt
-        - "/ignore\\s+(previous|prior|all)\\s+instructions/i"
-        - "/disregard\\s+(your|the)\\s+system/i"
-        - "/you\\s+are\\s+now\\s+a\\s+different/i"
-        - "/<system>|<\\|im_start\\|>system/i"
-        - "/forget\\s+everything\\s+above/i"
+      direction: outbound
+      content_matches:
+        detector: tool-poisoning
     action: deny
-    reason: "Line-jumping pattern in tool description"
-
-  - name: detect-suspicious-instructions-in-description
-    match:
-      method: tools/list
-      tool_description_score:
-        detector: prompt-guard
-        threshold: 0.7
-    action: deny
-    reason: "Tool description scored as prompt injection"
-
-  - name: detect-tool-description-credential-request
-    match:
-      method: tools/list
-      tool_description_matches:
-        - "/your\\s+api[\\s_-]?key/i"
-        - "/please\\s+include\\s+the.*password/i"
-        - "/append\\s+\\$\\{.*TOKEN/i"
-        - "/(BEGIN|END)\\s+(RSA|OPENSSH|EC)\\s+PRIVATE\\s+KEY/i"
-    action: deny
-    reason: "Tool description requests credentials"
+    reason: "tool description contains prompt-injection pattern"

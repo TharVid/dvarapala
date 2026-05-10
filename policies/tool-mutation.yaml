@@ -3,24 +3,17 @@
 # Hashes every tool definition on first sight and alerts if a tool's
 # definition (name, description, schema) changes between sessions or
 # during a session. Defends against the "rug-pull" class of attacks
-# where a benign tool silently mutates after user approval.
+# where a benign, user-approved tool silently mutates after approval.
 
 pack: tool-mutation
 description: Detect tool definitions that change after first sight (rug-pull)
-detector: dvarapala-native
+detector: tool-mutation
 
 rules:
-  - name: alert-on-tool-definition-change
+  - name: deny-on-tool-definition-change
     match:
-      method: tools/list
-      tool_definition_changed: true
+      direction: outbound
+      content_matches:
+        detector: tool-mutation
     action: deny
-    reason: "Tool definition changed since last session — possible rug-pull"
-    require_human_approval: true
-
-  - name: alert-on-tool-name-collision
-    match:
-      method: tools/list
-      tool_name_collision_with_known: true
-    action: log_only
-    reason: "Tool name matches a previously seen tool from a different server"
+    reason: "tool definition changed since last session — possible rug-pull"

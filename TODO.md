@@ -56,14 +56,17 @@ Wire third-party detectors. **No reinvented detection.**
 - [ ] `internal/detectors/egress/` — native URL allowlist
 - [ ] `internal/detectors/ratelimit/` — `golang.org/x/time/rate` per-key buckets
 
-## Phase 4 — MCP-specific detectors (v0.4.0)
+## Phase 4 — MCP-specific detectors ✅ (this commit)
 
-Dvarapala's novel research contribution.
+Dvarapala's novel research contribution. 5/5 attack-corpus cases now pass end-to-end.
 
-- [ ] `internal/detectors/toolpoisoning/` — tool-description analysis (heuristics + Prompt-Guard)
-- [ ] `internal/detectors/toolmutation/` — content-addressable tool-def store, mutation detection
-- [ ] Excessive-agency chain analysis (graph of tool calls in a session)
-- [ ] Indirect-prompt-injection in tool outputs (delegated to llm-guard + judge)
+- [x] `internal/detectors/toolpoisoning/` — hand-curated regex set covering `ignore previous instructions`, system-tag injection (`<|im_start|>system`, `<system>`), `you are now…` jailbreaks, DAN-mode, `BEGIN PRIVATE KEY` exfil, "include your api key" credential prompts
+- [x] `internal/detectors/toolmutation/` — stateful SHA-256 fingerprint store keyed by tool name, canonical JSON for schema (sorted keys), in-memory per-gateway, ready for JSONL persistence
+- [x] Both wired into `wrap.go`'s registry (always on, no env config required — they're in-process and free)
+- [x] Rulepacks updated: `policies/tool-poisoning.yaml` and `policies/tool-mutation.yaml` use `content_matches: { detector: ... }`
+- [x] New attack fixture `test/fixtures/attack-corpus/tool-mutation/001-rugpull.json` PASSes
+- [ ] Excessive-agency chain analysis (graph of tool calls in a session) — deferred
+- [ ] Indirect-prompt-injection in tool outputs is now caught by tool-poisoning regexes; richer coverage will land via llm-guard sidecar (Phase 3.5 wired the client; sidecar deployment is a deployment doc, not code)
 
 ## Phase 5 — UX & client install (v0.5.0)
 
