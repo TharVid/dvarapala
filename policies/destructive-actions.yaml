@@ -1,0 +1,40 @@
+# Destructive actions rule pack.
+#
+# Heuristic checks for shell / SQL / fs operations that destroy data.
+# These are MCP-tool-name-aware: only fire on tools that *can* execute them.
+
+pack: destructive-actions
+description: Block obviously destructive tool calls; require approval for risky ones
+detector: dvarapala-native
+
+rules:
+  - name: block-rm-rf-root
+    match:
+      tool_name_matches: "/(shell|exec|bash|sh|terminal)/i"
+      args.command:
+        - "/rm\\s+-rf\\s+/+/"
+        - "/rm\\s+-rf\\s+~\\/?/"
+        - "/dd\\s+if=.*\\s+of=\\/dev\\/(sd|nvme|disk)/"
+        - "/mkfs\\.[a-z]+\\s+\\/dev\\//"
+    action: deny
+    reason: "Destructive shell command targeting root/home/disk"
+
+  - name: require-approval-for-rm
+    match:
+      tool_name_matches: "/(shell|exec|bash|sh|terminal)/i"
+      args.command: "/rm\\s+-rf?/"
+    action: require_human_approval
+
+  - name: block-drop-truncate
+    match:
+      tool_name_matches: "/(sql|postgres|mysql|sqlite|database|db_)/i"
+      args.query: "/^\\s*(DROP\\s+(TABLE|DATABASE|SCHEMA)|TRUNCATE)\\s/i"
+    action: deny
+    reason: "Destructive SQL"
+
+  - name: require-approval-for-unscoped-delete
+    match:
+      tool_name_matches: "/(sql|postgres|mysql|sqlite)/i"
+      args.query: "/^\\s*DELETE\\s+FROM\\s+\\w+\\s*;?\\s*$/i"
+    action: require_human_approval
+    reason: "DELETE without WHERE"

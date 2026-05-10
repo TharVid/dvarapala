@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>dvarapala</id>
+    <version>0.1.0</version>
+    <title>Dvarapala</title>
+    <authors>Sunil Kumar (TharVid)</authors>
+    <projectUrl>https://github.com/tharvid/dvarapala</projectUrl>
+    <licenseUrl>https://github.com/tharvid/dvarapala/blob/main/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>MCP security gateway — drop-in protection for Model Context Protocol servers.</description>
+    <summary>Open-source security gateway for the Model Context Protocol.</summary>
+    <tags>mcp security llm ai claude cursor anthropic</tags>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>

@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dvarapala"
+version = "0.1.0"
+description = "Python SDK for Dvarapala — MCP security gateway"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Sunil Kumar (TharVid)", email = "sunil@tharvid.in" }]
+requires-python = ">=3.10"
+dependencies = [
+    # We do NOT reinvent detection. The SDK delegates to the dvarapala
+    # binary (or its sidecars). These deps are the ones we *bridge to*.
+    "pyyaml>=6.0",
+    "httpx>=0.27",
+]
+keywords = ["mcp", "security", "llm", "ai", "claude", "anthropic"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Security",
+]
+
+[project.optional-dependencies]
+mcp = ["mcp>=1.0"]
+dev = ["pytest>=8", "pytest-asyncio", "ruff", "mypy"]
+
+[project.urls]
+Homepage = "https://github.com/tharvid/dvarapala"
+Repository = "https://github.com/tharvid/dvarapala"
+Issues = "https://github.com/tharvid/dvarapala/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["dvarapala"]

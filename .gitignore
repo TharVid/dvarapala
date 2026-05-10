@@ -1,0 +1,49 @@
+# Build artifacts
+/dist/
+/bin/
+/build/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go
+/vendor/
+*.test
+*.out
+coverage.txt
+coverage.html
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Env / secrets
+.env
+.env.local
+*.pem
+*.key
+
+# Python SDK
+sdks/python/build/
+sdks/python/dist/
+sdks/python/*.egg-info/
+sdks/python/__pycache__/
+sdks/python/.venv/
+sdks/python/.pytest_cache/
+
+# TypeScript SDK
+sdks/typescript/node_modules/
+sdks/typescript/dist/
+sdks/typescript/*.tsbuildinfo
+
+# Logs
+*.log
+audit.jsonl
+
+# Local policy / config
+local-policy.yaml
+local-config.yaml

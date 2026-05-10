@@ -1,0 +1,40 @@
+# Full Dvarapala stack with Presidio + llm-guard sidecars for advanced detection.
+# Use this when you want PII/PHI/PCI detection (Presidio) and prompt-injection
+# detection (llm-guard) in addition to gitleaks-secrets and MCP-specific
+# detectors that ship in the core binary.
+
+services:
+  dvarapala:
+    image: ghcr.io/tharvid/dvarapala:latest
+    command: ["hub", "--config", "/etc/dvarapala/hub.yaml"]
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./hub.yaml:/etc/dvarapala/hub.yaml:ro
+      - ./policy.yaml:/etc/dvarapala/policy.yaml:ro
+      - ./audit:/var/log/dvarapala
+    environment:
+      DVARAPALA_PRESIDIO_URL: http://presidio-analyzer:3000
+      DVARAPALA_LLMGUARD_URL: http://llm-guard:8000
+    depends_on:
+      - presidio-analyzer
+      - llm-guard
+
+  presidio-analyzer:
+    image: mcr.microsoft.com/presidio-analyzer:latest
+    ports:
+      - "3000:3000"
+
+  presidio-anonymizer:
+    image: mcr.microsoft.com/presidio-anonymizer:latest
+    ports:
+      - "3001:3000"
+
+  llm-guard:
+    # llm-guard ships only as a Python library; this sidecar wraps it in FastAPI.
+    # See sidecars/llm-guard/Dockerfile for the build.
+    build:
+      context: ../../sidecars/llm-guard
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"

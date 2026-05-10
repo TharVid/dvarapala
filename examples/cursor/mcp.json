@@ -1,0 +1,14 @@
+{
+  "_comment": "Cursor reads ~/.cursor/mcp.json (global) or .cursor/mcp.json (project).",
+  "mcpServers": {
+    "filesystem": {
+      "command": "dvarapala",
+      "args": [
+        "wrap",
+        "--policy", "${env:HOME}/.dvarapala/policy.yaml",
+        "--",
+        "npx", "-y", "@modelcontextprotocol/server-filesystem", "${workspaceFolder}"
+      ]
+    }
+  }
+}

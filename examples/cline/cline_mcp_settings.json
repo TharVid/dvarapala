@@ -1,0 +1,15 @@
+{
+  "_comment": "Cline (VSCode) MCP settings — global config in ~/.config/cline/mcp_settings.json.",
+  "mcpServers": {
+    "github": {
+      "command": "dvarapala",
+      "args": [
+        "wrap",
+        "--policy", "~/.dvarapala/policy.yaml",
+        "--",
+        "npx", "-y", "@modelcontextprotocol/server-github"
+      ],
+      "env": { "GITHUB_TOKEN": "${env:GITHUB_TOKEN}" }
+    }
+  }
+}

@@ -1,0 +1,58 @@
+# Sidecar pattern: dvarapala fronts an MCP server in the same pod.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dvarapala-policy
+data:
+  policy.yaml: |
+    version: "1"
+    defaults:
+      - rulepack: pii
+      - rulepack: secrets
+      - rulepack: prompt-injection
+      - rulepack: tool-poisoning
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: mcp-postgres }
+  template:
+    metadata:
+      labels: { app: mcp-postgres }
+    spec:
+      containers:
+        - name: dvarapala
+          image: ghcr.io/tharvid/dvarapala:latest
+          args:
+            - proxy
+            - --policy=/etc/dvarapala/policy.yaml
+            - --upstream=http://localhost:7000
+            - --listen=0.0.0.0:9000
+          ports:
+            - containerPort: 9000
+          volumeMounts:
+            - name: policy
+              mountPath: /etc/dvarapala
+              readOnly: true
+        - name: mcp-postgres
+          image: ghcr.io/your-org/mcp-postgres:latest
+          ports:
+            - containerPort: 7000
+      volumes:
+        - name: policy
+          configMap:
+            name: dvarapala-policy
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-postgres
+spec:
+  selector: { app: mcp-postgres }
+  ports:
+    - port: 9000
+      targetPort: 9000

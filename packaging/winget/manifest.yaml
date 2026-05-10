@@ -1,0 +1,19 @@
+# Winget manifest template — submitted post-release to microsoft/winget-pkgs.
+PackageIdentifier: TharVid.Dvarapala
+PackageVersion: 0.1.0
+PackageLocale: en-US
+Publisher: TharVid
+PublisherUrl: https://tharvid.in
+PackageName: Dvarapala
+PackageUrl: https://github.com/tharvid/dvarapala
+License: MIT
+LicenseUrl: https://github.com/tharvid/dvarapala/blob/main/LICENSE
+ShortDescription: MCP security gateway — drop-in protection for Model Context Protocol servers
+Tags:
+  - mcp
+  - security
+  - llm
+  - ai
+  - claude
+ManifestType: singleton
+ManifestVersion: 1.6.0

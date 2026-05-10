@@ -1,0 +1,21 @@
+{
+  "version": "0.1.0",
+  "description": "MCP security gateway — drop-in protection for Model Context Protocol servers",
+  "homepage": "https://github.com/tharvid/dvarapala",
+  "license": "MIT",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/tharvid/dvarapala/releases/download/v0.1.0/dvarapala_0.1.0_windows_x86_64.zip",
+      "hash": "REPLACED_BY_GORELEASER"
+    }
+  },
+  "bin": "dvarapala.exe",
+  "checkver": "github",
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/tharvid/dvarapala/releases/download/v$version/dvarapala_$version_windows_x86_64.zip"
+      }
+    }
+  }
+}

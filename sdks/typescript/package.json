@@ -1,0 +1,38 @@
+{
+  "name": "@dvarapala/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for Dvarapala — MCP security gateway",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "lint": "eslint src",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["mcp", "security", "llm", "ai", "claude", "anthropic"],
+  "author": "Sunil Kumar (TharVid)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tharvid/dvarapala.git",
+    "directory": "sdks/typescript"
+  },
+  "homepage": "https://github.com/tharvid/dvarapala",
+  "peerDependencies": {
+    "@modelcontextprotocol/sdk": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.5",
+    "vitest": "^2.0",
+    "@types/node": "^20"
+  }
+}

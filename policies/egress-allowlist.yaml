@@ -1,0 +1,23 @@
+# Egress allowlist rule pack.
+#
+# Restricts which hosts/URLs tool calls may target. Useful when an MCP server
+# can make HTTP requests on behalf of the LLM (fetch, http_get, etc.) — without
+# this control an attacker can use indirect prompt injection to exfiltrate data
+# to an attacker-controlled host.
+
+pack: egress-allowlist
+description: Restrict tool-initiated network requests to approved hosts
+detector: dvarapala-native
+
+rules:
+  - name: enforce-allowlist
+    match:
+      tool_name_matches: "/(fetch|http|request|curl|webhook)/i"
+      url_host_not_in:
+        - api.github.com
+        - api.openai.com
+        - api.anthropic.com
+        - "*.googleapis.com"
+        - "*.amazonaws.com"
+    action: deny
+    reason: "Egress to non-allowlisted host"

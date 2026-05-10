@@ -1,0 +1,38 @@
+# Prompt injection rule pack.
+#
+# Uses llm-guard (https://github.com/protectai/llm-guard) as a sidecar plus
+# Meta's Prompt-Guard-86M classifier. Optional LLM-as-judge for borderline cases.
+
+pack: prompt-injection
+description: Detect direct + indirect prompt injection
+detectors:
+  - llm-guard      # https://github.com/protectai/llm-guard
+  - prompt-guard   # Meta Prompt-Guard-86M
+  - llm-judge      # fallback to LLM judgment for borderline cases
+
+rules:
+  - name: block-direct-prompt-injection
+    match:
+      direction: inbound
+      content_score:
+        detector: prompt-guard
+        threshold: 0.85
+    action: deny
+    reason: "Direct prompt injection detected"
+
+  - name: block-indirect-prompt-injection-in-tool-output
+    match:
+      direction: outbound
+      content_score:
+        detector: llm-guard
+        threshold: 0.7
+    action: deny
+    reason: "Indirect prompt injection in tool output"
+
+  - name: judge-borderline-cases
+    match:
+      content_score:
+        detector: prompt-guard
+        threshold_min: 0.5
+        threshold_max: 0.85
+    action: llm_judge

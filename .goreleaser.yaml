@@ -1,0 +1,168 @@
+version: 2
+
+project_name: dvarapala
+
+before:
+  hooks:
+    - go mod tidy
+    - go mod download
+
+builds:
+  - id: dvarapala
+    main: ./cmd/dvarapala
+    binary: dvarapala
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/tharvid/dvarapala/internal/version.Version={{.Version}}
+      - -X github.com/tharvid/dvarapala/internal/version.Commit={{.Commit}}
+      - -X github.com/tharvid/dvarapala/internal/version.Date={{.Date}}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - id: default
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_
+      {{- if eq .Os "darwin" }}macos
+      {{- else }}{{ .Os }}{{ end }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+      - policies/**/*
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    args:
+      - "sign-blob"
+      - "--yes"
+      - "--output-signature=${signature}"
+      - "${artifact}"
+
+sboms:
+  - artifacts: archive
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+dockers:
+  - image_templates:
+      - "ghcr.io/tharvid/dvarapala:{{ .Version }}-amd64"
+      - "ghcr.io/tharvid/dvarapala:latest-amd64"
+    use: buildx
+    dockerfile: packaging/docker/Dockerfile.goreleaser
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.source=https://github.com/tharvid/dvarapala"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .Commit }}"
+      - "--label=org.opencontainers.image.licenses=MIT"
+  - image_templates:
+      - "ghcr.io/tharvid/dvarapala:{{ .Version }}-arm64"
+      - "ghcr.io/tharvid/dvarapala:latest-arm64"
+    use: buildx
+    goarch: arm64
+    dockerfile: packaging/docker/Dockerfile.goreleaser
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.source=https://github.com/tharvid/dvarapala"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.licenses=MIT"
+
+docker_manifests:
+  - name_template: "ghcr.io/tharvid/dvarapala:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/tharvid/dvarapala:{{ .Version }}-amd64"
+      - "ghcr.io/tharvid/dvarapala:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/tharvid/dvarapala:latest"
+    image_templates:
+      - "ghcr.io/tharvid/dvarapala:latest-amd64"
+      - "ghcr.io/tharvid/dvarapala:latest-arm64"
+
+brews:
+  - name: dvarapala
+    repository:
+      owner: tharvid
+      name: homebrew-dvarapala
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: "https://github.com/tharvid/dvarapala"
+    description: "MCP security gateway — drop-in protection for Model Context Protocol servers"
+    license: "MIT"
+    test: |
+      system "#{bin}/dvarapala", "version"
+    install: |
+      bin.install "dvarapala"
+
+scoops:
+  - name: dvarapala
+    repository:
+      owner: tharvid
+      name: scoop-dvarapala
+      branch: main
+      token: "{{ .Env.SCOOP_TAP_TOKEN }}"
+    homepage: "https://github.com/tharvid/dvarapala"
+    description: "MCP security gateway"
+    license: MIT
+
+nfpms:
+  - id: dvarapala
+    package_name: dvarapala
+    vendor: TharVid
+    homepage: "https://github.com/tharvid/dvarapala"
+    maintainer: "Sunil Kumar <sunil@tharvid.in>"
+    description: "MCP security gateway"
+    license: "MIT"
+    formats:
+      - deb
+      - rpm
+      - apk
+    bindir: /usr/bin
+    contents:
+      - src: ./policies
+        dst: /etc/dvarapala/policies
+        type: tree
+      - src: ./LICENSE
+        dst: /usr/share/doc/dvarapala/LICENSE
+
+release:
+  github:
+    owner: tharvid
+    name: dvarapala
+  draft: false
+  prerelease: auto
+  mode: append
+  header: |
+    ## Dvarapala {{ .Tag }}
+    See [CHANGELOG](https://github.com/tharvid/dvarapala/blob/main/CHANGELOG.md) for full notes.

@@ -1,0 +1,58 @@
+# Example custom policy showing every action type.
+version: "1"
+
+defaults:
+  - rulepack: pii
+  - rulepack: secrets
+  - rulepack: prompt-injection
+  - rulepack: tool-poisoning
+
+audit:
+  format: jsonl
+  path: ~/.dvarapala/audit.jsonl
+  schema: ocsf
+
+rules:
+  - name: deny-prod-db-writes
+    match:
+      tool: postgres_query
+      args.dsn: "*prod*"
+      args.sql: "/INSERT|UPDATE|DELETE/i"
+    action: deny
+
+  - name: redact-pii-from-tool-output
+    match:
+      direction: outbound
+      content_score:
+        detector: presidio
+        threshold: 0.5
+    action: redact
+
+  - name: human-approval-for-rm
+    match:
+      tool: shell_exec
+      args.command: "/rm\\s+-rf/"
+    action: require_human_approval
+
+  - name: rate-limit-search
+    match:
+      tool: web_search
+    rate_limit:
+      requests_per_second: 1
+      burst: 5
+    action: delay
+
+  - name: log-all-github-writes
+    match:
+      tool_name_matches: "/^github_(create|update|delete|merge)/"
+    action: log_only
+
+  - name: rewrite-fetch-to-internal-mirror
+    match:
+      tool: fetch
+      args.url: "/^https://api\\.example\\.com/"
+    action: rewrite
+    rewrite:
+      args.url:
+        replace: "/^https://api\\.example\\.com/"
+        with: "https://api-mirror.internal/"

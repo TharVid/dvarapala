@@ -1,0 +1,40 @@
+# golangci-lint config for the Dvarapala scaffold.
+# Permissive while the codebase is still skeletons; tighten as packages fill in.
+
+run:
+  timeout: 5m
+  go: "1.24"
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+    - gofmt
+    - goimports
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+    # Stub command handlers in cmd/dvarapala intentionally don't use ctx/args yet.
+    - path: cmd/dvarapala/commands\.go
+      linters:
+        - unused
+        - revive
+  exclude-dirs:
+    - sdks
+    - sidecars
+    - test/fixtures
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+  govet:
+    enable-all: true
+    disable: [fieldalignment, shadow]

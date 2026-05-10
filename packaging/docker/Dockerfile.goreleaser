@@ -1,0 +1,6 @@
+# Used by GoReleaser — binary already built on host, just copy in.
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY dvarapala /usr/bin/dvarapala
+COPY policies /etc/dvarapala/policies
+USER nonroot:nonroot
+ENTRYPOINT ["/usr/bin/dvarapala"]

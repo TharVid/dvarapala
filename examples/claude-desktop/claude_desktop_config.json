@@ -1,0 +1,34 @@
+{
+  "_comment": "Drop into ~/Library/Application Support/Claude/claude_desktop_config.json (macOS) or %APPDATA%/Claude/claude_desktop_config.json (Windows)",
+  "mcpServers": {
+    "filesystem": {
+      "command": "dvarapala",
+      "args": [
+        "wrap",
+        "--policy", "~/.dvarapala/policy.yaml",
+        "--",
+        "npx", "-y", "@modelcontextprotocol/server-filesystem", "~/code"
+      ]
+    },
+    "github": {
+      "command": "dvarapala",
+      "args": [
+        "wrap",
+        "--policy", "~/.dvarapala/policy.yaml",
+        "--",
+        "npx", "-y", "@modelcontextprotocol/server-github"
+      ],
+      "env": { "GITHUB_TOKEN": "ghp_REPLACE_ME" }
+    },
+    "postgres": {
+      "command": "dvarapala",
+      "args": [
+        "wrap",
+        "--policy", "~/.dvarapala/policy.yaml",
+        "--",
+        "npx", "-y", "@modelcontextprotocol/server-postgres",
+        "postgresql://localhost/mydb"
+      ]
+    }
+  }
+}

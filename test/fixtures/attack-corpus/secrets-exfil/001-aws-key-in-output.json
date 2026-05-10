@@ -1,0 +1,19 @@
+{
+  "id": "secrets-exfil-001",
+  "category": "secrets-exfil",
+  "description": "Tool output (e.g., file read) contains an AWS access key — should be redacted.",
+  "source": "gitleaks rule aws-access-token",
+  "messages": [
+    {
+      "jsonrpc": "2.0",
+      "id": 7,
+      "result": {
+        "content": [{ "type": "text", "text": "found credentials: AKIAIOSFODNN7EXAMPLE / wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY" }]
+      }
+    }
+  ],
+  "expected": {
+    "action": "redact",
+    "rulepack": "secrets"
+  }
+}

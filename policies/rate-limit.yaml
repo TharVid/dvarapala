@@ -1,0 +1,25 @@
+# Rate limit rule pack.
+#
+# Uses golang.org/x/time/rate token-bucket primitives.
+
+pack: rate-limit
+description: Per-tool, per-session rate limiting
+
+rules:
+  - name: per-session-default
+    match:
+      direction: inbound
+    rate_limit:
+      requests_per_second: 5
+      burst: 20
+      key: session.id
+    action: delay   # delay | deny
+
+  - name: per-tool-expensive
+    match:
+      tool_name_matches: "/(scrape|fetch|search|llm|generate)/i"
+    rate_limit:
+      requests_per_second: 1
+      burst: 3
+      key: "session.id+tool.name"
+    action: delay

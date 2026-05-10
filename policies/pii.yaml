@@ -1,0 +1,38 @@
+# PII / PHI / PCI rule pack.
+#
+# Detection delegated to Microsoft Presidio (sidecar). We do NOT maintain
+# our own PII regex — Presidio is industry-standard and covers HIPAA, GDPR,
+# PCI-DSS, plus 50+ recognizers including Aadhaar, PAN, IBAN, etc.
+#
+# Sidecar URL configured via DVARAPALA_PRESIDIO_URL env var.
+
+pack: pii
+description: Detects and redacts personal/health/financial data via Microsoft Presidio
+detector: presidio
+
+rules:
+  - name: redact-pii-in-tool-output
+    match:
+      direction: outbound
+      content_score:
+        detector: presidio
+        threshold: 0.5
+    action: redact
+    reason: "PII detected in tool output (Presidio)"
+
+  - name: block-pii-in-tool-args
+    match:
+      direction: inbound
+      content_score:
+        detector: presidio
+        entities: [CREDIT_CARD, US_SSN, IN_AADHAAR, IN_PAN, MEDICAL_LICENSE]
+        threshold: 0.7
+    action: deny
+    reason: "Sensitive PII in tool arguments"
+
+  - name: log-low-confidence-pii
+    match:
+      content_score:
+        detector: presidio
+        threshold: 0.3
+    action: log_only
