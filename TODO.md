@@ -30,7 +30,7 @@ UI work is gated on a clean baseline. Fix these first:
 - [x] **Audit log rotation** — shipped in v0.1.8 (50 MiB × 5 keep, configurable via `--audit-max-mb` / `--audit-keep`; follow-mode survives rotation via inode-change detection)
 - [x] **Policy hot-reload** — shipped v0.1.10 (mtime polling, atomic engine swap, bad reload keeps previous rules)
 - [x] **Configurable redaction string** — shipped v0.1.9 (per-rule `replacement:` field with `{{rule}}` / `{{kind}}` placeholders; empty falls back to legacy `[REDACTED:rule-id]`)
-- [ ] **Egress allowlist enforcement** — listed in default rule pack as a scaffold but not actually enforced
+- [x] **Egress allowlist enforcement** — shipped v0.1.11 (`url_host_not_in:` on Match now fires for non-allowlisted http/https hosts in tool args)
 - [ ] **Edge case** — HTTP daemons retagged via `--wrap-all` when listen port differs from record
 
 ## 🖥 Phase 7 — observability + control
@@ -47,7 +47,7 @@ UI work is gated on a clean baseline. Fix these first:
 - [ ] **Excessive-agency / chain detection** — flag suspicious tool sequences (read_file → external_post). Novel contribution; pairs with tool-mutation as the second MCP-specific detector.
 - [ ] **Tool-call graph analysis** — visualise + alert on chains crossing trust boundaries
 - [ ] **Configurable redaction templates** (see bug list)
-- [ ] **Egress allowlist enforcement** (see bug list)
+- [x] **Egress allowlist enforcement** (see bug list — done v0.1.11)
 
 ## 🧪 Attack corpus expansion
 

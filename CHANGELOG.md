@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.11] — 2026-05-10
+
+### Added
+
+- **Egress allowlist enforcement.** The `url_host_not_in` field on a
+  policy match is no longer a YAML scaffold — it actually fires now.
+  The rule matches when at least one URL-shaped tool argument has a
+  host that is NOT in the supplied allowlist:
+
+  ```yaml
+  - name: deny-egress-outside-allowlist
+    match:
+      tool: fetch
+      url_host_not_in: [github.com, api.example.com, mcp.deepwiki.com]
+    action: deny
+    reason: "Outbound HTTP only allowed to vetted hosts"
+  ```
+
+  Hosts are normalised to lowercase, ports are stripped before
+  comparison. Only http/https URLs participate (file://, ftp://, etc.
+  are evaluated by other rules). Multiple URL-shaped args are AND'd:
+  any single non-allowlisted host fires the rule. Empty allowlist
+  (`url_host_not_in: []`) means "no host is allowlisted" → every URL
+  argument fires the rule. Omitting the field skips the check.
+
+  Pairs naturally with `action: deny` for hard egress blocking, or
+  `action: log_only` for an audit-only "see where my LLM is reaching
+  out" mode.
+
 ## [0.1.10] — 2026-05-10
 
 ### Added

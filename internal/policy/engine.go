@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 	"sync/atomic"
@@ -154,6 +155,9 @@ func (e *Engine) Evaluate(ctx context.Context, m mcp.Message, dir mcp.Direction,
 		if !matchArgs(cr.ArgRegexes, args) {
 			continue
 		}
+		if !matchURLHostNotIn(cr.Rule.Match.URLHostNotIn, args) {
+			continue
+		}
 
 		// content_matches: run the named detector against scanContent.
 		var findings []detectors.Finding
@@ -263,6 +267,64 @@ func extractArgs(m mcp.Message) map[string]string {
 			continue
 		}
 		out[k] = string(v) // fallback: raw JSON
+	}
+	return out
+}
+
+// matchURLHostNotIn implements the egress allowlist check: the rule
+// matches when at least one URL-shaped string in the tool arguments
+// has a host that is NOT in the supplied allowlist. Hosts are
+// normalised to lowercase and compared without port. Empty allowlist
+// (nil) skips the check entirely; an explicit empty slice (declared
+// in YAML as `url_host_not_in: []`) means "no host is allowlisted",
+// so any URL argument fires the rule.
+//
+// "URL-shaped" is intentionally loose: anything that url.Parse
+// resolves to scheme=http/https with a non-empty Host counts. Args
+// like `command: "rm -rf /"` won't accidentally trigger this.
+func matchURLHostNotIn(allowlist []string, args map[string]string) bool {
+	if allowlist == nil {
+		return true
+	}
+	allow := make(map[string]struct{}, len(allowlist))
+	for _, h := range allowlist {
+		allow[strings.ToLower(h)] = struct{}{}
+	}
+	hosts := extractURLHosts(args)
+	if len(hosts) == 0 {
+		// No URL-shaped args at all → rule doesn't apply.
+		return false
+	}
+	for _, h := range hosts {
+		if _, ok := allow[h]; !ok {
+			return true
+		}
+	}
+	return false
+}
+
+// extractURLHosts walks the flat string args map and returns the host
+// component (lowercased, port stripped) of every value that parses as
+// an http/https URL with a non-empty host.
+func extractURLHosts(args map[string]string) []string {
+	var out []string
+	for _, v := range args {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		u, err := url.Parse(v)
+		if err != nil || u.Host == "" {
+			continue
+		}
+		if u.Scheme != "http" && u.Scheme != "https" {
+			continue
+		}
+		host := strings.ToLower(u.Hostname())
+		if host == "" {
+			continue
+		}
+		out = append(out, host)
 	}
 	return out
 }
