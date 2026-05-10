@@ -115,10 +115,12 @@ func (b *stdioBackend) readLoop(stdout io.Reader) {
 		if err != nil {
 			continue
 		}
-		if ch, ok := b.pending.LoadAndDelete(id); ok {
-			select {
-			case ch.(chan mcp.Message) <- m:
-			default:
+		if rawCh, ok := b.pending.LoadAndDelete(id); ok {
+			if ch, isChan := rawCh.(chan mcp.Message); isChan {
+				select {
+				case ch <- m:
+				default:
+				}
 			}
 		}
 	}
