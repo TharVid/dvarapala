@@ -47,3 +47,4 @@ audit.jsonl
 # Local policy / config
 local-policy.yaml
 local-config.yaml
+fake-aws-credentials.txt

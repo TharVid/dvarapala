@@ -9,7 +9,6 @@
 package proxy
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -18,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -253,7 +253,13 @@ func redactWalk(ctx context.Context, v any, reg *detectors.Registry) any {
 }
 
 // redactString runs every detector in reg against s and returns s with
-// every finding replaced by "[REDACTED:rule-id]".
+// every finding's Match substring replaced by "[REDACTED:rule-id]".
+//
+// We use literal-string replacement (strings.ReplaceAll on h.Match) rather
+// than byte-offset splicing because some detectors report column-within-
+// line positions instead of absolute byte offsets — gitleaks does, for
+// instance — and applying those columns as if they were offsets in
+// multi-line content would clobber the wrong span.
 func redactString(ctx context.Context, s string, reg *detectors.Registry) string {
 	var allHits []detectors.Finding
 	for _, name := range reg.Names() {
@@ -270,16 +276,23 @@ func redactString(ctx context.Context, s string, reg *detectors.Registry) string
 	if len(allHits) == 0 {
 		return s
 	}
-	sort.Slice(allHits, func(i, j int) bool { return allHits[i].Start > allHits[j].Start })
-	out := []byte(s)
+	// Replace longer matches first so that an outer span that contains a
+	// nested match (e.g. a generic-api-key line that wraps an aws-access-
+	// token) is redacted as a whole; the nested match's later replace
+	// becomes a no-op (substring no longer present), which is fine — the
+	// secret is still gone.
+	sort.SliceStable(allHits, func(i, j int) bool {
+		return len(allHits[i].Match) > len(allHits[j].Match)
+	})
+	out := s
 	for _, h := range allHits {
-		if h.Start < 0 || h.End > len(out) || h.Start >= h.End {
+		if h.Match == "" {
 			continue
 		}
-		marker := []byte(fmt.Sprintf("[REDACTED:%s]", safeRuleID(h.RuleID)))
-		out = bytes.Join([][]byte{out[:h.Start], marker, out[h.End:]}, nil)
+		marker := fmt.Sprintf("[REDACTED:%s]", safeRuleID(h.RuleID))
+		out = strings.ReplaceAll(out, h.Match, marker)
 	}
-	return string(out)
+	return out
 }
 
 func safeRuleID(s string) string {
