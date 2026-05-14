@@ -52,3 +52,6 @@ fake-aws-credentials.txt
 # Personal / local-only notes (thesis, etc.)
 thesis-notes*
 *.local.md
+
+# Thesis source — kept private at ~/dvarapala-thesis-private/, never in this repo
+docs/thesis/
